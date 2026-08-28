@@ -112,6 +112,20 @@ function VisitTracker() {
   return null;
 }
 
+function CustomerProfileSync() {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    void fetch('/api/profile/sync', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  }, [isLoaded, isSignedIn]);
+
+  return null;
+}
+
 function ReferralLanding({ params }: { params: { code: string } }) {
   const [, setLocation] = useLocation();
   const { isLoaded, isSignedIn } = useAuth();
@@ -155,6 +169,7 @@ function ClerkProviderWithRoutes() {
           <CurrencyProvider>
             <CartProvider>
               <VisitTracker />
+              <CustomerProfileSync />
               <Switch>
                 <Route path="/" component={Home} />
                 <Route path="/products/:slug" component={ProductPage} />

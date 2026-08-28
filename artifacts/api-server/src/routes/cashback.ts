@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { getAuth } from "@clerk/express";
+import { createClerkClient, getAuth } from "@clerk/express";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   cashbackTransactionsTable,
@@ -18,6 +18,17 @@ import { reconcileReferralRewards, referralCodeFor } from "../lib/referrals";
 
 const router: IRouter = Router();
 const CASHBACK_CURRENCIES = ["EGP", "USD"] as const;
+const clerkSecretKey = process.env.NODE_ENV === "production"
+  ? process.env.CLERK_SECRET_KEY
+  : process.env.CLERK_DEV_SECRET_KEY;
+
+if (!clerkSecretKey) {
+  throw new Error(
+    `${process.env.NODE_ENV === "production" ? "CLERK_SECRET_KEY" : "CLERK_DEV_SECRET_KEY"} environment variable is required`,
+  );
+}
+
+const clerkClient = createClerkClient({ secretKey: clerkSecretKey });
 
 function authUserId(req: Request): string | null {
   return getAuth(req)?.userId ?? null;
@@ -104,6 +115,54 @@ router.get("/referral/me", async (req, res): Promise<void> => {
     inArray(cashbackTransactionsTable.status, ["pending", "available"]),
   ));
   res.json({ referralCode, referralCount: new Set(rewards.map((reward) => reward.orderId)).size });
+});
+
+router.post("/profile/sync", async (req, res): Promise<void> => {
+  const customerId = authUserId(req);
+  if (!customerId) {
+    res.status(401).json({ error: "Sign in is required" });
+    return;
+  }
+
+  try {
+    const user = await clerkClient.users.getUser(customerId);
+    const primaryEmail = user.emailAddresses.find(
+      (address) => address.id === user.primaryEmailAddressId,
+    )?.emailAddress
+      ?? user.emailAddresses.find((address) => address.verification?.status === "verified")?.emailAddress;
+
+    if (!primaryEmail) {
+      res.status(422).json({ error: "The signed-in account does not have an email address yet" });
+      return;
+    }
+
+    const email = primaryEmail.trim().toLowerCase();
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || null;
+    const [existing] = await db.select().from(customerProfilesTable)
+      .where(eq(customerProfilesTable.customerId, customerId))
+      .limit(1);
+
+    if (!existing) {
+      await db.insert(customerProfilesTable).values({
+        customerId,
+        name,
+        email,
+        referralCode: referralCodeFor(customerId),
+      });
+    } else if (!existing.email || (!existing.name && name)) {
+      await db.update(customerProfilesTable)
+        .set({
+          ...(existing.email ? {} : { email }),
+          ...(existing.name ? {} : { name }),
+        })
+        .where(eq(customerProfilesTable.customerId, customerId));
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error, customerId }, "Failed to sync customer profile");
+    res.status(500).json({ error: "Could not sync customer profile" });
+  }
 });
 
 router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {

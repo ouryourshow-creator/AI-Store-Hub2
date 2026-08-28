@@ -3,8 +3,8 @@ name: Neon environment split
 description: Development and production can report the same neondb name while using different Neon branches or endpoints.
 ---
 
-Development and production use environment-specific database connections. The database name alone is not enough to identify the Neon branch or endpoint; compare the environment when investigating missing rows.
+Development and production use environment-specific database connections. For this external-Neon setup, `DATABASE_URL` is runtime-managed by Replit in production, so the app uses a separately named `KEYTOPIA_DATABASE_URL` secret as the canonical Neon connection.
 
-**Why:** The development database can legitimately be empty while the published app has production orders, even though both connections report `neondb` and `public`.
+**Why:** The database name alone is not enough to identify the Neon branch or endpoint, and Replit's production `DATABASE_URL` can silently route writes to the managed Replit database instead of Neon.
 
-**How to apply:** Query production when validating live data, query development only for preview data, and do not treat an empty development table as evidence that production inserts failed.
+**How to apply:** Keep `KEYTOPIA_DATABASE_URL` configured for the published environment, republish after changes, and query the matching Neon environment when validating live data.
