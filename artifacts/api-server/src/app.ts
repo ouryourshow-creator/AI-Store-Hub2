@@ -115,10 +115,33 @@ app.use(express.urlencoded({ extended: true, limit: "256kb" }));
 
 // Clerk auth middleware — after body parsers, before routes. The app uses the
 // owner's external Clerk instance, so use its key directly rather than
-// deriving a Replit custom-domain key from the incoming host.
+// deriving a Replit custom-domain key from the incoming host. Preview must use
+// the development instance because Clerk production keys reject replit.dev
+// origins.
+const isProduction = process.env.NODE_ENV === "production";
+const clerkPublishableKey = isProduction
+  ? process.env.CLERK_PUBLISHABLE_KEY
+  : process.env.VITE_CLERK_DEV_PUBLISHABLE_KEY;
+const clerkSecretKey = isProduction
+  ? process.env.CLERK_SECRET_KEY
+  : process.env.CLERK_DEV_SECRET_KEY;
+
+if (!clerkPublishableKey) {
+  throw new Error(
+    `${isProduction ? "CLERK_PUBLISHABLE_KEY" : "VITE_CLERK_DEV_PUBLISHABLE_KEY"} environment variable is required`,
+  );
+}
+
+if (!clerkSecretKey) {
+  throw new Error(
+    `${isProduction ? "CLERK_SECRET_KEY" : "CLERK_DEV_SECRET_KEY"} environment variable is required`,
+  );
+}
+
 app.use(
   clerkMiddleware({
-    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+    publishableKey: clerkPublishableKey,
+    secretKey: clerkSecretKey,
   }),
 );
 

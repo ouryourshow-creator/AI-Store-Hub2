@@ -24,8 +24,11 @@ const basePath = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
 // This app uses the owner's external Clerk instance. External publishable keys
 // already encode their Frontend API host, so they must not be derived from the
-// Replit preview hostname.
-const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+// Replit preview hostname. Clerk production keys reject Replit preview origins,
+// so preview uses the matching development instance key.
+const clerkPubKey = import.meta.env.DEV
+  ? import.meta.env.VITE_CLERK_DEV_PUBLISHABLE_KEY
+  : import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 // Clerk passes full paths to routerPush/routerReplace, but wouter's
 // setLocation prepends the base — strip it to avoid doubling.
