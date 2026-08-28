@@ -54,3 +54,8 @@ timeoutMs = 180000
 deploymentTarget = "autoscale"
 run = ["pnpm", "run", "start"]
 build = ["pnpm", "run", "build"]
+
+[userenv]
+
+[userenv.production]
+ADMIN_EMAILS = "bassamihab@gmail.com"
