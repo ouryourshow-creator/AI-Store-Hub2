@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Minus, Trash2, RefreshCw } from 'lucide-react';
 import { useCart } from '../contexts/CartContext';
 import { useLang } from '../contexts/LanguageContext';
+import { useUser } from '@clerk/react';
 import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 
@@ -22,6 +23,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
     clearPriceChangedCount,
   } = useCart();
   const { t, dir } = useLang();
+  const { isLoaded, isSignedIn } = useUser();
   const [, setLocation] = useLocation();
 
   // In RTL, drawer slides from left; in LTR from right
@@ -166,7 +168,10 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                   <button
                     onClick={() => {
                       onClose();
-                      setLocation('/checkout');
+                      // Ask signed-out customers to authenticate before entering
+                      // checkout. The cart is kept in context, and sign-in
+                      // redirects back to checkout after authentication.
+                      setLocation(isLoaded && !isSignedIn ? '/sign-in' : '/checkout');
                     }}
                     disabled={isRevalidating}
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-4 px-4 rounded-[20px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
