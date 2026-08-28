@@ -3,14 +3,15 @@ import pg from "pg";
 import * as schema from "./schema";
 
 const { Pool } = pg;
+const databaseUrl = process.env.KEYTOPIA_DATABASE_URL ?? process.env.DATABASE_URL;
 
-if (!process.env.DATABASE_URL) {
+if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "KEYTOPIA_DATABASE_URL must be set to the canonical Neon connection string.",
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const pool = new Pool({ connectionString: databaseUrl });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
