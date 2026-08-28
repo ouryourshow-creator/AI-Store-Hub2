@@ -4,6 +4,7 @@ import { getGetProductBySlugQueryKey, getGetProductQueryKey, useGetProduct, useG
 import { useCart } from '../contexts/CartContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useLang } from '../contexts/LanguageContext';
+import { getVisitorCountryCode } from '../lib/visitorCountry';
 import {
   formatProductTag,
   getAvailabilityBadgeClass,
@@ -81,11 +82,18 @@ export default function ProductPage() {
     const key = 'keytopia_visitor';
     const visitorId = localStorage.getItem(key) ?? crypto.randomUUID();
     localStorage.setItem(key, visitorId);
-    recordVisit.mutate({
-      data: { path: location, productId: product.id, visitorId },
-    }, {
-      onSuccess: (result) => setCurrency(result.currency),
+    let cancelled = false;
+    void getVisitorCountryCode().then((countryCode) => {
+      if (cancelled) return;
+      recordVisit.mutate({
+        data: { path: location, productId: product.id, visitorId, countryCode },
+      }, {
+        onSuccess: (result) => setCurrency(result.currency),
+      });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [location, product?.id]);
 
   const BackArrow = dir === 'rtl' ? ArrowRight : ArrowLeft;

@@ -932,6 +932,9 @@ components:
           type: ["number", "null"]
         visitorId:
           type: ["string", "null"]
+        countryCode:
+          type: ["string", "null"]
+          maxLength: 2
 
     VisitResult:
       type: object

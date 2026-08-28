@@ -224,7 +224,12 @@ function resolveAnalyticsRange(query: Request["query"]): AnalyticsRange | null {
   return { preset, start, endExclusive: tomorrow, startDate: formatUtcDay(start), endDate: formatUtcDay(today) };
 }
 
-async function detectCountry(req: Request): Promise<string> {
+function normalizeCountryCode(value: string | null | undefined): string | null {
+  const countryCode = value?.trim().toUpperCase() ?? "";
+  return /^[A-Z]{2}$/.test(countryCode) ? countryCode : null;
+}
+
+async function detectCountry(req: Request, clientCountryCode?: string | null): Promise<string> {
   const headerCountry = getHeader(req, [
     "x-replit-user-country",
     "x-replit-geo-country",
@@ -232,6 +237,8 @@ async function detectCountry(req: Request): Promise<string> {
     "x-vercel-ip-country",
   ]);
   if (headerCountry) return headerCountry;
+  const browserCountry = normalizeCountryCode(clientCountryCode);
+  if (browserCountry) return browserCountry;
 
   const ip = req.ip?.trim() ?? "";
   if (!ip || isPrivateOrLocalIp(ip)) {
@@ -805,7 +812,7 @@ router.post("/analytics/visit", analyticsVisitLimiter, async (req, res): Promise
   }
   const data = parsed.data;
   const visitorId = data.visitorId?.slice(0, 96) || `anon-${randomUUID()}`;
-  const countryCode = await detectCountry(req);
+  const countryCode = await detectCountry(req, data.countryCode);
   await db.insert(analyticsVisitsTable).values({
     visitorId,
     path: data.path.slice(0, 300),

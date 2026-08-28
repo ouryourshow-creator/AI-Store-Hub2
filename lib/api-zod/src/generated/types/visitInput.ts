@@ -13,4 +13,9 @@ export interface VisitInput {
   productId?: number | null;
   /** @nullable */
   visitorId?: string | null;
+  /**
+     * @maxLength 2
+     * @nullable
+     */
+  countryCode?: string | null;
 }

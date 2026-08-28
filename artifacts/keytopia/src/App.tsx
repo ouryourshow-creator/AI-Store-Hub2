@@ -18,6 +18,7 @@ import Orders from './pages/Orders';
 import Checkout from './pages/Checkout';
 import NotFound from './pages/not-found';
 import { Toaster } from 'sonner';
+import { getVisitorCountryCode } from './lib/visitorCountry';
 
 const queryClient = new QueryClient();
 
@@ -102,11 +103,18 @@ function VisitTracker() {
     const key = 'keytopia_visitor';
     const visitorId = localStorage.getItem(key) ?? crypto.randomUUID();
     localStorage.setItem(key, visitorId);
-    recordVisit.mutate({
-      data: { path: location, productId: null, visitorId },
-    }, {
-      onSuccess: (result) => setCurrency(result.currency),
+    let cancelled = false;
+    void getVisitorCountryCode().then((countryCode) => {
+      if (cancelled) return;
+      recordVisit.mutate({
+        data: { path: location, productId: null, visitorId, countryCode },
+      }, {
+        onSuccess: (result) => setCurrency(result.currency),
+      });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [location]); // Only record on meaningful route changes.
 
   return null;

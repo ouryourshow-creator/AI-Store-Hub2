@@ -1063,12 +1063,15 @@ export const GetAdminSalesAnalyticsResponse = zod.object({
  * @summary Record an anonymous storefront visit
  */
 
+export const recordVisitBodyCountryCodeMax = 2;
+
 
 
 export const RecordVisitBody = zod.object({
   "path": zod.string().min(1),
   "productId": zod.number().nullish(),
-  "visitorId": zod.string().nullish()
+  "visitorId": zod.string().nullish(),
+  "countryCode": zod.string().max(recordVisitBodyCountryCodeMax).nullish()
 })
 
 export const RecordVisitResponse = zod.object({
