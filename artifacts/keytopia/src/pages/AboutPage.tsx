@@ -70,9 +70,9 @@ export default function AboutPage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="mt-10 bg-card rounded-[24px] border border-black/[0.06] shadow-sm p-7 md:p-10"
+          className="mt-10 bg-card rounded-[24px] border border-black/[0.06] shadow-sm p-7 md:p-10 text-center"
         >
-          <p className="text-muted-foreground text-lg leading-9">
+          <p className="text-muted-foreground text-lg leading-9 font-semibold">
             {t('aboutDetails')}
           </p>
           <p className="mt-6 text-foreground text-lg leading-9 font-semibold">
