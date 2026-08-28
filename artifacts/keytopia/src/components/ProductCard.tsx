@@ -12,7 +12,6 @@ import {
   getProductBadgeClass,
   productTagBaseClass,
 } from '../lib/productBadges';
-import { calculateCashback } from '../lib/cashback';
 
 export default function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -121,9 +120,6 @@ export default function ProductCard({ product }: { product: Product }) {
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[10px] md:text-xs font-semibold text-emerald-700">
-              {display.code} {calculateCashback(display.amount).toFixed(2)} {t('cashbackOnProduct')}
-            </p>
           </div>
         </div>
 
