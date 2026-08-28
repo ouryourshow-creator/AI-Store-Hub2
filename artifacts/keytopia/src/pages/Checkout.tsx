@@ -255,7 +255,13 @@ export default function Checkout() {
           {!isLoaded ? (
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           ) : (
-            <SignIn routing="hash" forceRedirectUrl="/checkout" signUpForceRedirectUrl="/checkout" />
+            <SignIn
+              routing="path"
+              path={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-in`}
+              signUpUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-up`}
+              forceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/checkout`}
+              signUpForceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/checkout`}
+            />
           )}
         </div>
       </Layout>

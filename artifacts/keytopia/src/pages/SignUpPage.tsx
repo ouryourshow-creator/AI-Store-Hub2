@@ -1,16 +1,15 @@
-import { SignIn } from '@clerk/react';
+import { SignUp } from '@clerk/react';
 
 const basePath = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 
-export default function SignInPage() {
+export default function SignUpPage() {
   return (
     <div className="min-h-[100dvh] flex items-center justify-center bg-background px-4">
-      <SignIn
+      <SignUp
         routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up`}
+        path={`${basePath}/sign-up`}
+        signInUrl={`${basePath}/sign-in`}
         forceRedirectUrl={`${basePath}/orders`}
-        signUpForceRedirectUrl={`${basePath}/orders`}
       />
     </div>
   );

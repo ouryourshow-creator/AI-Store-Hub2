@@ -13,6 +13,7 @@ import Admin from './pages/Admin';
 import ProductPage from './pages/ProductPage';
 import PolicyPage from './pages/PolicyPage';
 import SignInPage from './pages/SignInPage';
+import SignUpPage from './pages/SignUpPage';
 import Orders from './pages/Orders';
 import Checkout from './pages/Checkout';
 import NotFound from './pages/not-found';
@@ -134,6 +135,7 @@ function ClerkProviderWithRoutes() {
       proxyUrl={clerkProxyUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
@@ -149,6 +151,7 @@ function ClerkProviderWithRoutes() {
                 <Route path="/policy" component={PolicyPage} />
                 {/* REQUIRED — /*? optional wildcard matches both bare URL and Clerk OAuth sub-paths */}
                 <Route path="/sign-in/*?" component={SignInPage} />
+                <Route path="/sign-up/*?" component={SignUpPage} />
                 <Route path="/orders" component={Orders} />
                 <Route path="/checkout" component={Checkout} />
                 <Route path="/admin" component={Admin} />

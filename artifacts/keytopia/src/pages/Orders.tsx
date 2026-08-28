@@ -81,7 +81,13 @@ export default function Orders() {
                 : 'Sign in to view your past orders, track activation status, and contact support.'}
             </p>
             <div className="flex justify-center">
-              <SignIn routing="hash" forceRedirectUrl="/orders" signUpForceRedirectUrl="/orders" />
+              <SignIn
+                routing="path"
+                path={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-in`}
+                signUpUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-up`}
+                forceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/orders`}
+                signUpForceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/orders`}
+              />
             </div>
           </div>
         </div>
