@@ -2,4 +2,5 @@
 - [Orval codegen: inline request bodies collide](orval-inline-body-collision.md) — an inline (non-$ref) request body schema in openapi.yaml breaks `tsc --build` for lib/api-zod with an ambiguous export error.
 - [External Clerk keys](external-clerk-key-wiring.md) — owner-managed Clerk keys must be passed directly; Replit host-derived keys can point auth at an invalid preview custom domain.
 - [Admin whitelist deployment](admin-whitelist-deployment.md) — workflow-only admin email exports affect preview, not published deployments; configure production separately.
+- [Neon environment split](neon-environment-split.md) — development and production can report `neondb` while using different Neon branches or endpoints.
 - [Referral cashback reconciliation](referral-cashback-reconciliation.md) — completed referred orders need idempotent repair so missed cross-account credits can be recovered safely.
