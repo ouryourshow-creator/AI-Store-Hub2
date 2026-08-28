@@ -551,7 +551,19 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
             ne(ordersTable.id, order.id),
           )).limit(1);
 
-        if (referrer && referrer.customerId !== order.customerId && !priorPaidOrder) {
+        const [priorReferralReward] = await tx
+          .select({ id: cashbackTransactionsTable.id })
+          .from(cashbackTransactionsTable)
+          .innerJoin(ordersTable, eq(ordersTable.id, cashbackTransactionsTable.orderId))
+          .where(and(
+            eq(cashbackTransactionsTable.type, "credit"),
+            eq(cashbackTransactionsTable.source, "referral"),
+            eq(ordersTable.customerId, order.customerId),
+            ne(ordersTable.id, order.id),
+          ))
+          .limit(1);
+
+        if (referrer && referrer.customerId !== order.customerId && !priorPaidOrder && !priorReferralReward) {
           const [existingReferralCredit] = await tx.select().from(cashbackTransactionsTable)
             .where(and(
               eq(cashbackTransactionsTable.orderId, order.id),
