@@ -10,6 +10,7 @@ import { CurrencyProvider, useCurrency } from './contexts/CurrencyContext';
 import Home from './pages/Home';
 import Admin from './pages/Admin';
 import ProductPage from './pages/ProductPage';
+import AboutPage from './pages/AboutPage';
 import PolicyPage from './pages/PolicyPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
@@ -157,6 +158,7 @@ function ClerkProviderWithRoutes() {
               <Switch>
                 <Route path="/" component={Home} />
                 <Route path="/products/:slug" component={ProductPage} />
+                <Route path="/about" component={AboutPage} />
                 <Route path="/ref/:code" component={ReferralLanding} />
                 <Route path="/policy" component={PolicyPage} />
                 {/* REQUIRED — /*? optional wildcard matches both bare URL and Clerk OAuth sub-paths */}

@@ -18,13 +18,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     ? [
         { label: 'الرئيسية', href: '/' },
         { label: 'الأقسام', href: '/#products' },
-        { label: 'من نحن', href: '/#about' },
+        { label: 'من نحن', href: '/about' },
         { label: 'الاسترداد والخصوصية', href: '/policy' },
       ]
     : [
         { label: 'Home', href: '/' },
         { label: 'Categories', href: '/#products' },
-        { label: 'About us', href: '/#about' },
+        { label: 'About us', href: '/about' },
         { label: 'Refunds & privacy', href: '/policy' },
       ];
 

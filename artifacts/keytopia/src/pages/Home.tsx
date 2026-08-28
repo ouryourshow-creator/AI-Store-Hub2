@@ -499,7 +499,7 @@ export default function Home() {
       </div>
 
       {/* ── Reviews section ── */}
-      <section id="about" className="w-full bg-gradient-to-b from-[#F7F9FC] to-white py-20 border-t border-black/[0.04] scroll-mt-32">
+      <section className="w-full bg-gradient-to-b from-[#F7F9FC] to-white py-20 border-t border-black/[0.04]">
         <div className="max-w-7xl mx-auto px-6">
           {/* Header */}
           <div className="text-center mb-12">

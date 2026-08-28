@@ -112,6 +112,18 @@ export const translations = {
     contactViaWhatsApp: 'تواصل معنا عبر واتساب',
     lastUpdated: 'آخر تحديث',
 
+    // About page
+    aboutTitle: 'من نحن',
+    aboutIntro: 'KeyTopia هو متجر متخصص في الاشتراكات والمنتجات الرقمية، نوفر من خلاله أدوات الذكاء الاصطناعي، البرامج الاحترافية، منصات التعليم، وخدمات الإنتاجية بأسعار تنافسية وتجربة شراء بسيطة وواضحة.',
+    aboutFocusTitle: 'نركز على ثلاث نقاط أساسية:',
+    aboutBestPrices: 'أسعار أفضل',
+    aboutFastDelivery: 'تفعيل وتسليم سريع',
+    aboutRealSupport: 'دعم حقيقي قبل وبعد الشراء',
+    aboutDetails: 'نحرص على توضيح جميع تفاصيل كل منتج، بما في ذلك مدة الاشتراك، طريقة التفعيل، الأجهزة المدعومة، والضمان إن وجد.',
+    aboutGoal: 'هدفنا هو أن تحصل على الأدوات التي تحتاجها بسهولة، وبسعر مناسب، ومن مكان يمكنك الاعتماد عليه.',
+    aboutBrand: 'KeyTopia',
+    aboutTagline: 'اكتشف عالم أفضل من الاشتراكات',
+
     // Categories
     categories: 'الفئات',
     manageCategories: 'إنشاء وإدارة فئات المنتجات.',
@@ -303,6 +315,18 @@ export const translations = {
     howToClaimContent: 'Contact us directly on WhatsApp with your name, order number, and a description of the issue. Our team will respond and resolve it within a few hours.',
     contactViaWhatsApp: 'Contact Us on WhatsApp',
     lastUpdated: 'Last updated',
+
+    // About page
+    aboutTitle: 'About us',
+    aboutIntro: 'KeyTopia is a store specializing in subscriptions and digital products. We provide AI tools, professional software, learning platforms, and productivity services at competitive prices with a simple, clear buying experience.',
+    aboutFocusTitle: 'We focus on three essentials:',
+    aboutBestPrices: 'Better prices',
+    aboutFastDelivery: 'Fast activation and delivery',
+    aboutRealSupport: 'Real support before and after purchase',
+    aboutDetails: 'We make sure to clearly explain every product detail, including the subscription duration, activation method, supported devices, and warranty when available.',
+    aboutGoal: 'Our goal is to help you get the tools you need easily, at the right price, from a place you can rely on.',
+    aboutBrand: 'KeyTopia',
+    aboutTagline: 'Discover a better world of subscriptions',
 
     // Categories
     categories: 'Categories',
