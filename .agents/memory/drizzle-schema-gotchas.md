@@ -80,3 +80,15 @@ narrow change, and full `push` pulls in unrelated pending drift you haven't
 verified is safe, don't force through it. Apply the one approved change
 directly (e.g. a scoped `ALTER TABLE ... DROP DEFAULT`) and surface the
 other drift separately for the user to decide on.
+
+## New target with Replit-managed session table
+
+When initializing a fresh Neon target, `drizzle-kit push --force` can stop on a
+noninteractive prompt because the target already contains `user_sessions`, which
+is created by the application but is not declared in the Drizzle schema. A
+generated schema migration can create the KeyTopia tables without removing that
+session table.
+
+**How to apply:** preserve `user_sessions`; generate and apply a schema migration
+that scopes changes to the declared application tables before copying application
+data.
