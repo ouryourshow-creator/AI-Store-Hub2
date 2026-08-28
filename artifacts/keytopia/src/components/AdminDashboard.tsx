@@ -2,6 +2,7 @@ import { useGetAdminDashboard, getGetAdminDashboardQueryKey } from '@workspace/a
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { DollarSign, ShoppingBag, Eye, TrendingUp, TrendingDown, MapPin, Package } from 'lucide-react';
 import { useLang } from '../contexts/LanguageContext';
+import { getCountryName } from '../lib/countryNames';
 
 export default function AdminDashboard() {
   const { dir } = useLang();
@@ -34,6 +35,11 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  const countries = dashboard.countries.slice(0, 5).map((item) => ({
+    ...item,
+    country: getCountryName(item.country, dir),
+  }));
 
   const StatCard = ({ title, value, icon: Icon, trend }: any) => (
     <div className="bg-white p-6 rounded-[24px] border border-black/[0.03] shadow-sm flex flex-col justify-between">
@@ -146,7 +152,7 @@ export default function AdminDashboard() {
           </h3>
           <div className="h-[300px]" dir="ltr">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dashboard.countries.slice(0, 5)} layout="vertical" margin={{ top: 0, right: 0, left: 30, bottom: 0 }}>
+              <BarChart data={countries} layout="vertical" margin={{ top: 0, right: 0, left: 30, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="rgba(0,0,0,0.05)" />
                 <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
                 <YAxis dataKey="country" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--foreground))', fontWeight: 600 }} />

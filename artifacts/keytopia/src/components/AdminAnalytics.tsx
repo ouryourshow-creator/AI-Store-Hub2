@@ -13,6 +13,7 @@ import {
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CalendarDays, DollarSign, Eye, MapPin, ShoppingBag, type LucideIcon } from 'lucide-react';
 import { useLang } from '../contexts/LanguageContext';
+import { getCountryName } from '../lib/countryNames';
 
 type AnalyticsKind = 'visits' | 'sales';
 
@@ -172,6 +173,10 @@ export default function AdminAnalytics({ kind }: { kind: AnalyticsKind }) {
 
 function VisitsReport({ data, dir }: { data: VisitsAnalytics; dir: 'rtl' | 'ltr' }) {
   const isEmpty = data.totalVisits === 0;
+  const countries = data.countries.map((item) => ({
+    ...item,
+    country: getCountryName(item.country, dir),
+  }));
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -197,7 +202,7 @@ function VisitsReport({ data, dir }: { data: VisitsAnalytics; dir: 'rtl' | 'ltr'
           <ReportCard className="lg:col-span-2" title={dir === 'rtl' ? 'أكثر البلدان زيارة' : 'Top countries'}>
             <div className="h-[310px]" dir="ltr">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.countries} layout="vertical" margin={{ top: 8, right: 12, left: 24, bottom: 0 }}>
+                <BarChart data={countries} layout="vertical" margin={{ top: 8, right: 12, left: 24, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal vertical={false} stroke="rgba(0,0,0,0.05)" />
                   <XAxis type="number" axisLine={false} tickLine={false} allowDecimals={false} />
                   <YAxis type="category" dataKey="country" width={50} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />

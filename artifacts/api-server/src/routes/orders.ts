@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 import { Router, type IRouter, type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { getAuth } from "@clerk/express";
@@ -124,6 +125,35 @@ function getHeader(req: Request, names: string[]): string | null {
   return null;
 }
 
+function isPrivateOrLocalIp(value: string): boolean {
+  const ip = value.trim().replace(/^::ffff:/i, "");
+  const ipVersion = isIP(ip);
+
+  if (ipVersion === 4) {
+    const octets = ip.split(".").map(Number);
+    const [first, second] = octets;
+    return first === 10
+      || first === 127
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168)
+      || (first === 169 && second === 254);
+  }
+
+  if (ipVersion === 6) {
+    const normalized = ip.toLowerCase();
+    return normalized === "::"
+      || normalized === "::1"
+      || normalized.startsWith("fc")
+      || normalized.startsWith("fd")
+      || normalized.startsWith("fe8")
+      || normalized.startsWith("fe9")
+      || normalized.startsWith("fea")
+      || normalized.startsWith("feb");
+  }
+
+  return true;
+}
+
 type AnalyticsRange = {
   preset: string;
   start: Date;
@@ -203,8 +233,8 @@ async function detectCountry(req: Request): Promise<string> {
   ]);
   if (headerCountry) return headerCountry;
 
-  const ip = req.ip ?? "";
-  if (!/^(?!(10|127|172\.(1[6-9]|2\d|3[0-1])|192\.168)\.)\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+  const ip = req.ip?.trim() ?? "";
+  if (!ip || isPrivateOrLocalIp(ip)) {
     return "UNKNOWN";
   }
   try {
