@@ -12,6 +12,7 @@ import {
   getProductBadgeClass,
   productTagBaseClass,
 } from '../lib/productBadges';
+import { calculateCashback } from '../lib/cashback';
 import claudeLogo from '@assets/claude-ai-icon_png_1787956843438.png';
 import geminiLogo from '@assets/Gemini-logo_1787956843439.png';
 import grokLogo from '@assets/Grok_1787956843441.png';
@@ -160,6 +161,7 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
         const displayPrice = product.pricingOptions?.length
           ? Math.min(...product.pricingOptions.map((option) => option.salePrice ?? option.price))
           : product.salePrice ?? product.price;
+        const cashbackAmount = calculateCashback(displayPrice);
         const duration = product.pricingOptions?.length
           ? [...product.pricingOptions].sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price))[0].duration
           : product.duration;
@@ -194,6 +196,9 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
             <div className="p-3" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
               <p className="font-display font-semibold text-sm text-foreground truncate mb-1">{product.name}</p>
               <p className="text-primary font-bold text-sm">EGP {displayPrice}</p>
+              <p className="text-emerald-700 font-semibold text-[10px] mt-0.5">
+                EGP {cashbackAmount.toFixed(2)} {lang === 'ar' ? 'كاش باك' : 'cashback'}
+              </p>
               {typeof product.soldCount === 'number' && product.soldCount > 0 && (
                 <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200">
                   <TrendingUp className="w-2.5 h-2.5" />

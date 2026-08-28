@@ -11,6 +11,7 @@ import {
   getProductBadgeClass,
   productTagBaseClass,
 } from '../lib/productBadges';
+import { calculateCashback } from '../lib/cashback';
 import Layout from '../components/Layout';
 import { ArrowRight, ArrowLeft, ShieldCheck, Zap, Clock, MessageCircle, CheckCircle2, Tag, Info, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -130,6 +131,7 @@ export default function ProductPage() {
   const selectedUsdPrice = selectedOption.salePriceUsd ?? selectedOption.priceUsd;
   const selectedCurrency = currency === 'USD' && selectedUsdPrice != null ? 'USD' : 'EGP';
   const selectedPrice = selectedCurrency === 'USD' ? selectedUsdPrice! : selectedOption.salePrice ?? selectedOption.price;
+  const cashbackToEarn = calculateCashback(selectedPrice);
 
   const handleAddToCart = () => {
     addItem(product, selectedOption.duration, selectedPrice, selectedCurrency);
@@ -318,6 +320,12 @@ export default function ProductPage() {
                     </span>
                   )}
                 </div>
+              </div>
+              <div className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                <span className="font-display font-bold">
+                  {selectedCurrency} {cashbackToEarn.toFixed(2)}
+                </span>{' '}
+                {t('cashbackOnProduct')}
               </div>
               <button
                 onClick={handleAddToCart}
