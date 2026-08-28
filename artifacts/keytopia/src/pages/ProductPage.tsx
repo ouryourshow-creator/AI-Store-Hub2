@@ -50,12 +50,12 @@ export default function ProductPage() {
 
   useEffect(() => {
     const fallbackTitle = 'Keytopia Store';
-    const fallbackDescription = 'Premium digital subscriptions delivered instantly.';
+    const fallbackDescription = 'اشترك في أشهر برامج الذكاء الاصطناعي، بأرخص الأسعار.';
     const title = product ? `${product.name} | Keytopia` : fallbackTitle;
     const description = product?.description?.trim() || fallbackDescription;
     const image = product?.coverImageUrl
       ? new URL(product.coverImageUrl, window.location.origin).toString()
-      : `${window.location.origin}/logo.svg`;
+      : `${window.location.origin}/logo.png`;
     const url = `${window.location.origin}${location}`;
 
     document.title = title;
