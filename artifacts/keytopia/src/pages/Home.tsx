@@ -16,7 +16,7 @@ import claudeLogo from '@assets/claude-ai-icon_png_1787956843438.png';
 import geminiLogo from '@assets/Gemini-logo_1787956843439.png';
 import grokLogo from '@assets/Grok_1787956843441.png';
 import netflixLogo from '@assets/images_1787956843442.png';
-import handLogo from '@assets/imgwebp_(2)_1787956843442.webp';
+import capcutLogo from '@assets/capcut-icon.svg';
 
 const REVIEWS = [
   {
@@ -288,16 +288,16 @@ export default function Home() {
           }> = [
             { src: claudeLogo, top: '8%',  left: '3%',   size: 68, rotate: -12, dur: 6.2, dy: 14 },
             { src: netflixLogo, top: '70%', left: '11%',  size: 50, rotate: -8,  dur: 8.3, dy: 12 },
-            { src: handLogo, top: '55%', left: '2%',   size: 58, rotate: 8,   dur: 7.8, dy: 10 },
-            { src: geminiLogo, top: '20%', left: '13%',  size: 52, rotate: 6,   dur: 5.5, dy: 18 },
+            { src: capcutLogo, top: '55%', left: '2%',   size: 58, rotate: 8,   dur: 7.8, dy: 10 },
+            { src: geminiLogo, top: '20%', left: '13%',  size: 72, rotate: 6,   dur: 5.5, dy: 18 },
             { src: netflixLogo, top: '80%', left: '24%',  size: 66, rotate: 8,  dur: 6.7, dy: 16 },
-            { src: grokLogo, top: '5%',  left: '30%',  size: 40, rotate: -5,  dur: 9.1, dy: 8  },
-            { src: grokLogo, top: '40%', right: '3%',  size: 72, rotate: 10,  dur: 7.0, dy: 20 },
-            { src: geminiLogo, top: '8%',  right: '10%', size: 60, rotate: -6,  dur: 5.8, dy: 15 },
+            { src: grokLogo, top: '5%',  left: '30%',  size: 60, rotate: -5,  dur: 9.1, dy: 8  },
+            { src: grokLogo, top: '40%', right: '3%',  size: 92, rotate: 10,  dur: 7.0, dy: 20 },
+            { src: geminiLogo, top: '8%',  right: '10%', size: 82, rotate: -6,  dur: 5.8, dy: 15 },
             { src: netflixLogo, top: '68%', right: '5%',  size: 54, rotate: -14, dur: 8.6, dy: 11 },
             { src: claudeLogo, top: '22%', right: '20%', size: 46, rotate: 9,   dur: 6.4, dy: 17 },
-            { src: handLogo, top: '60%', right: '17%', size: 52, rotate: -10, dur: 7.5, dy: 13 },
-            { src: geminiLogo, top: '3%',  right: '32%', size: 72, rotate: 7,   dur: 5.2, dy: 9  },
+            { src: capcutLogo, top: '60%', right: '17%', size: 52, rotate: -10, dur: 7.5, dy: 13 },
+            { src: geminiLogo, top: '3%',  right: '32%', size: 96, rotate: 7,   dur: 5.2, dy: 9  },
           ];
 
           return logos.map((logo, i) => {
