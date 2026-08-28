@@ -5,6 +5,10 @@ localPort = 5000
 externalPort = 5000
 
 [[ports]]
+localPort = 5050
+externalPort = 3001
+
+[[ports]]
 localPort = 8080
 externalPort = 8080
 
@@ -45,3 +49,8 @@ defaultBucketID = "replit-objstore-8e0d08af-33be-4587-899b-681ed5b2a437"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["pnpm", "run", "start"]
+build = ["pnpm", "run", "build"]

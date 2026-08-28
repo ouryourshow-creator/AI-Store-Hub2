@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import path from "node:path";
 import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
@@ -122,5 +123,24 @@ app.use(
 );
 
 app.use("/api", router);
+
+// Production publishes one HTTP process, so serve the built SPA from the API
+// server after API routes have had a chance to handle the request.
+if (process.env.NODE_ENV === "production") {
+  const frontendDist = path.resolve(
+    import.meta.dirname,
+    "../../keytopia/dist/public",
+  );
+
+  app.use(express.static(frontendDist));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api")) {
+      next();
+      return;
+    }
+
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
 
 export default app;

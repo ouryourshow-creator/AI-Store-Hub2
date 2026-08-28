@@ -137,7 +137,10 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
 });
 
 router.post("/admin/users/:customerId/cashback", requireAdmin, async (req, res): Promise<void> => {
-  const customerId = req.params.customerId;
+  const customerIdParam = req.params.customerId;
+  const customerId = Array.isArray(customerIdParam)
+    ? customerIdParam[0]
+    : customerIdParam;
   const amount = Math.round(Number(req.body?.amount) * 100) / 100;
   const currency = req.body?.currency;
   const operation = req.body?.operation;
