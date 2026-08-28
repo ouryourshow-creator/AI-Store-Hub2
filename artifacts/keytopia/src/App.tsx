@@ -44,7 +44,7 @@ const clerkAppearance = {
   options: {
     logoPlacement: 'inside' as const,
     logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+    logoImageUrl: `${window.location.origin}${basePath}/logo.png`,
   },
   variables: {
     colorPrimary: '#2469FF',
@@ -73,8 +73,10 @@ const clerkAppearance = {
     identityPreviewEditButton: 'text-[#2469FF]',
     formFieldSuccessText: 'text-green-600',
     alertText: 'text-[#EF4444]',
-    logoBox: 'flex justify-center mb-2',
-    logoImage: 'h-10 w-10',
+    // logo.png includes transparent padding, so scale the image inside a
+    // fixed-height slot to keep the full Keytopia wordmark legible.
+    logoBox: 'flex justify-center mb-3 h-16 overflow-visible',
+    logoImage: 'h-16 w-auto max-w-[260px] object-contain scale-[2.5]',
     socialButtonsBlockButton: 'border border-[#E1E7F0] hover:bg-[#F8FAFB]',
     formButtonPrimary: 'bg-[#2469FF] hover:bg-[#1a57e8] text-white',
     formFieldInput: 'bg-[#F8FAFB] border border-[#E1E7F0] text-[#111827]',
@@ -130,6 +132,18 @@ function ClerkProviderWithRoutes() {
     <ClerkProvider
       publishableKey={clerkPubKey}
       appearance={clerkAppearance}
+      localization={{
+        signIn: {
+          start: {
+            title: 'Sign in to KeyTopia Store',
+          },
+        },
+        signUp: {
+          start: {
+            title: 'Create your KeyTopia Store account',
+          },
+        },
+      }}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))}
