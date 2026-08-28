@@ -245,9 +245,10 @@ async function detectCountry(req: Request, clientCountryCode?: string | null): P
     return "UNKNOWN";
   }
   try {
-    const response = await fetch(`https://ipapi.co/${ip}/country/`, { signal: AbortSignal.timeout(1200) });
-    const country = (await response.text()).trim().toUpperCase();
-    return /^[A-Z]{2}$/.test(country) ? country : "UNKNOWN";
+    const response = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`, { signal: AbortSignal.timeout(1200) });
+    if (!response.ok) return "UNKNOWN";
+    const result = await response.json() as { success?: boolean; country_code?: string };
+    return result.success === false ? "UNKNOWN" : normalizeCountryCode(result.country_code) ?? "UNKNOWN";
   } catch {
     return "UNKNOWN";
   }
@@ -819,6 +820,14 @@ router.post("/analytics/visit", analyticsVisitLimiter, async (req, res): Promise
     productId: data.productId ?? null,
     countryCode,
   });
+  if (countryCode !== "UNKNOWN") {
+    await db.update(analyticsVisitsTable)
+      .set({ countryCode })
+      .where(and(
+        eq(analyticsVisitsTable.visitorId, visitorId),
+        eq(analyticsVisitsTable.countryCode, "UNKNOWN"),
+      ));
+  }
   res.json({ country: countryCode, currency: countryCode === "EG" ? "EGP" : "USD" });
 });
 

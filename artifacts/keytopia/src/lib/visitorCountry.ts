@@ -1,5 +1,16 @@
-const cachedCountryKey = 'keytopia_visitor_country';
-let countryPromise: Promise<string | null> | null = null;
+const cachedCountryKey = 'keytopia_visitor_country_v2';
+const timezoneCountryHints: Record<string, string> = {
+  'Africa/Cairo': 'EG',
+  'Africa/Casablanca': 'MA',
+  'Africa/Johannesburg': 'ZA',
+  'Asia/Amman': 'JO',
+  'Asia/Beirut': 'LB',
+  'Asia/Bahrain': 'BH',
+  'Asia/Dubai': 'AE',
+  'Asia/Kuwait': 'KW',
+  'Asia/Qatar': 'QA',
+  'Asia/Riyadh': 'SA',
+};
 
 function validCountryCode(value: string | null | undefined): string | null {
   const countryCode = value?.trim().toUpperCase() ?? '';
@@ -14,19 +25,13 @@ function validCountryCode(value: string | null | undefined): string | null {
 export function getVisitorCountryCode(): Promise<string | null> {
   const cached = validCountryCode(localStorage.getItem(cachedCountryKey));
   if (cached) return Promise.resolve(cached);
-  if (countryPromise) return countryPromise;
 
-  countryPromise = fetch('https://ipapi.co/country/', {
-    cache: 'force-cache',
-    signal: AbortSignal.timeout(1800),
-  })
-    .then((response) => response.ok ? response.text() : '')
-    .then((value) => {
-      const countryCode = validCountryCode(value);
-      if (countryCode) localStorage.setItem(cachedCountryKey, countryCode);
-      return countryCode;
-    })
-    .catch(() => null);
-
-  return countryPromise;
+  const localeCountry = (navigator.languages ?? [navigator.language])
+    .map((locale) => locale.match(/[-_]([A-Z]{2})$/i)?.[1])
+    .map(validCountryCode)
+    .find((countryCode): countryCode is string => Boolean(countryCode));
+  const timezoneCountry = timezoneCountryHints[Intl.DateTimeFormat().resolvedOptions().timeZone];
+  const countryCode = localeCountry ?? timezoneCountry ?? null;
+  if (countryCode) localStorage.setItem(cachedCountryKey, countryCode);
+  return Promise.resolve(countryCode);
 }

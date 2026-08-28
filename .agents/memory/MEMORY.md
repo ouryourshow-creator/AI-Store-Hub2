@@ -3,4 +3,5 @@
 - [External Clerk keys](external-clerk-key-wiring.md) — owner-managed Clerk keys must be passed directly; Replit host-derived keys can point auth at an invalid preview custom domain.
 - [Admin whitelist deployment](admin-whitelist-deployment.md) — workflow-only admin email exports affect preview, not published deployments; configure production separately.
 - [Neon environment split](neon-environment-split.md) — development and production can report `neondb` while using different Neon branches or endpoints.
+- [Analytics country attribution](analytics-country-attribution.md) — preview proxies may hide visitor IP/country headers; client hints and same-visitor repair handle legacy `UNKNOWN` rows.
 - [Referral cashback reconciliation](referral-cashback-reconciliation.md) — completed referred orders need idempotent repair so missed cross-account credits can be recovered safely.
