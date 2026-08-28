@@ -1,2 +1,3 @@
 - [Drizzle-kit push/publish bugs](drizzle-schema-gotchas.md) — raw `sql` column defaults wrapped in a cast (e.g. `nextval(...)::text`) can crash drizzle-kit's DDL diff generator; `push`/`push-force` need `drizzle.config.ts` present or they silently can't run.
 - [Orval codegen: inline request bodies collide](orval-inline-body-collision.md) — an inline (non-$ref) request body schema in openapi.yaml breaks `tsc --build` for lib/api-zod with an ambiguous export error.
+- [External Clerk keys](external-clerk-key-wiring.md) — owner-managed Clerk keys must be passed directly; Replit host-derived keys can point auth at an invalid preview custom domain.
