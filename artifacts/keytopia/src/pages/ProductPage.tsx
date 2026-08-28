@@ -4,6 +4,12 @@ import { getGetProductBySlugQueryKey, getGetProductQueryKey, useGetProduct, useG
 import { useCart } from '../contexts/CartContext';
 import { useCurrency } from '../contexts/CurrencyContext';
 import { useLang } from '../contexts/LanguageContext';
+import {
+  formatProductTag,
+  getAvailabilityBadgeClass,
+  getProductBadgeClass,
+  productTagBaseClass,
+} from '../lib/productBadges';
 import Layout from '../components/Layout';
 import { ArrowRight, ArrowLeft, ShieldCheck, Zap, Clock, MessageCircle, CheckCircle2, Tag, Info, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -185,10 +191,14 @@ export default function ProductPage() {
           >
             {/* Badges row */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${product.availability === 'in_stock' ? 'bg-emerald-50 text-emerald-700' : product.availability === 'low_stock' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
-                {product.availability.replaceAll('_', ' ')}
+              <span className={`${productTagBaseClass} px-3 py-1.5 text-xs ${getAvailabilityBadgeClass(product.availability)}`}>
+                {formatProductTag(product.availability)}
               </span>
-              {product.badges.map((badge) => <span key={badge} className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary capitalize">{badge.replaceAll('_', ' ')}</span>)}
+              {product.badges.map((badge) => (
+                <span key={badge} className={`${productTagBaseClass} px-3 py-1.5 text-xs ${getProductBadgeClass(badge)}`}>
+                  {formatProductTag(badge)}
+                </span>
+              ))}
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider text-[#1CC88A] bg-[#1CC88A]/10 border border-[#1CC88A]/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#1CC88A] animate-pulse" />
                 {t('instantActivation')}

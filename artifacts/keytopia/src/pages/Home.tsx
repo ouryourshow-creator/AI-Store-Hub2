@@ -6,6 +6,12 @@ import { Search, CheckCircle2, Zap, ShieldCheck, Clock, Shield, Star, Facebook, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLang } from '../contexts/LanguageContext';
 import { Link } from 'wouter';
+import {
+  formatProductTag,
+  getAvailabilityBadgeClass,
+  getProductBadgeClass,
+  productTagBaseClass,
+} from '../lib/productBadges';
 
 const REVIEWS = [
   {
@@ -171,12 +177,12 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
               <span className="absolute top-2 start-2 bg-white/90 backdrop-blur-sm text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
                 {duration}
               </span>
-              <span className="absolute bottom-2 start-2 bg-white/90 backdrop-blur-sm text-foreground text-[9px] font-bold px-2 py-0.5 rounded-full capitalize">
-                {product.availability.replaceAll('_', ' ')}
+              <span className={`absolute bottom-2 start-2 ${productTagBaseClass} ${getAvailabilityBadgeClass(product.availability)}`}>
+                {formatProductTag(product.availability)}
               </span>
               {product.badges[0] && (
-                <span className="absolute top-2 end-2 bg-primary/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full capitalize">
-                  {product.badges[0].replaceAll('_', ' ')}
+                <span className={`absolute top-2 end-2 ${productTagBaseClass} ${getProductBadgeClass(product.badges[0])}`}>
+                  {formatProductTag(product.badges[0])}
                 </span>
               )}
             </div>
@@ -337,6 +343,28 @@ export default function Home() {
                   style={baseStyle}
                 >
                   <path d={geminiPath} fill="white" />
+                </motion.svg>
+              );
+            }
+
+            if (logo.kind === 'chatgpt' || logo.kind === 'netflix') {
+              return (
+                <motion.svg
+                  key={i}
+                  viewBox="0 0 100 100"
+                  aria-hidden="true"
+                  animate={{ y: [0, -logo.dy, 0] }}
+                  transition={{ duration: logo.dur, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}
+                  style={baseStyle}
+                >
+                  {logo.kind === 'chatgpt' ? (
+                    <g fill="none" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="6">
+                      <path d="M50 18c7.2 0 13.3 4.1 15.9 10.1a17 17 0 0 1 18.7 10.4 17 17 0 0 1-3.3 21.1 17 17 0 0 1-18.7 18.8A17 17 0 0 1 44.2 82a17 17 0 0 1-21.1-3.3A17 17 0 0 1 23 60a17 17 0 0 1-10.4-18.7 17 17 0 0 1 18.7-10.4A17 17 0 0 1 50 18Z" />
+                      <path d="m50 18-8.1 14.1m24 7.8-16.2 0m24.8 19.7-15.9-9.2M62.6 78.4l-8.1-14.1m-24 7.8 16.2 0M22 52.4l15.9 9.2" />
+                    </g>
+                  ) : (
+                    <path fill="white" d="M20 13h15l30 74H50L20 13Zm45 0h15v74H65V13Z" />
+                  )}
                 </motion.svg>
               );
             }

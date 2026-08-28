@@ -150,11 +150,22 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
 
   const handlePaymentSelect = (method: PaymentMethod) => {
     setPaymentMethod(method);
-    setStep(3);
+    if (method === 'other') {
+      void handleSendProof(method);
+    } else {
+      setStep(3);
+    }
   };
 
-  const handleSendProof = async () => {
-    if (!paymentMethod || createOrder.isPending) return;
+  const handleSendProof = async (selectedMethod: Exclude<PaymentMethod, null> = paymentMethod as Exclude<PaymentMethod, null>) => {
+    if (!selectedMethod || createOrder.isPending) return;
+    // Open during the click so the browser does not block WhatsApp after the order request.
+    const whatsappWindow = window.open('', '_blank');
+    if (whatsappWindow) {
+      whatsappWindow.document.title = isRtl ? 'جار فتح واتساب...' : 'Opening WhatsApp...';
+      whatsappWindow.document.body.textContent = isRtl ? 'جار تجهيز الطلب...' : 'Preparing your order...';
+      whatsappWindow.opener = null;
+    }
     const methodLabel: Record<string, string> = {
       instapay: 'Instapay',
       vodafone: isRtl ? 'فودافون كاش' : 'Vodafone Cash',
@@ -172,7 +183,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
           promoCode: promo.status === 'valid' ? promo.code : null,
           cashbackAmount: appliedCashback || undefined,
           referralCode: localStorage.getItem('keytopia_referral') ?? undefined,
-          paymentMethod,
+          paymentMethod: selectedMethod,
           items: items.map(item => ({
             productId: item.id,
             duration: item.selectedDuration,
@@ -184,15 +195,21 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
         item => `• ${item.productName} (${item.duration}) ×${item.quantity} — ${order.currency} ${item.lineTotal}`
       ).join('\n');
       const promoLine = order.discount > 0 ? `\n${t('discount')}: -${order.currency} ${order.discount}` : '';
-      const method = methodLabel[paymentMethod] ?? paymentMethod;
-      const msg = isRtl
-        ? `مرحباً، أرسل لكم إيصال الدفع لطلبي من كيتوبيا.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}\n\n[أرجو إرفاق إيصال الدفع]`
-        : `Hello, I am sending payment proof for my Keytopia order.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}\n\n[Please attach payment proof]`;
-      window.open(`${WA_LINK}?text=${encodeURIComponent(msg)}`, '_blank');
+      const method = methodLabel[selectedMethod] ?? selectedMethod;
+      const msg = selectedMethod === 'other'
+        ? (isRtl
+          ? `مرحباً، أريد إتمام هذا الطلب عبر طريقة دفع أخرى.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}\n\nأرجو التواصل معي لتنسيق الدفع.`
+          : `Hello, I would like to complete this order using another payment method.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}\n\nPlease contact me to arrange payment.`)
+        : (isRtl
+          ? `مرحباً، أرسل لكم إيصال الدفع لطلبي من كيتوبيا.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}\n\n[أرجو إرفاق إيصال الدفع]`
+          : `Hello, I am sending payment proof for my Keytopia order.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}\n\n[Please attach payment proof]`);
+      if (whatsappWindow) whatsappWindow.location.replace(`${WA_LINK}?text=${encodeURIComponent(msg)}`);
+      else window.location.assign(`${WA_LINK}?text=${encodeURIComponent(msg)}`);
       queryClient.invalidateQueries({ queryKey: getGetMyCashbackQueryKey() });
       clearCart();
       handleClose();
     } catch {
+      whatsappWindow?.close();
       // The generated mutation retains its error state for the checkout button message.
     }
   };
@@ -569,7 +586,7 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
                     <div className="bg-[#F0FFF5] border border-[#1CC88A]/30 rounded-[16px] p-4">
                       <p className="text-sm font-semibold text-foreground mb-1">{t('afterPayment')}</p>
                       <p className="text-xs text-muted-foreground mb-3">{t('sendProofExplain')}</p>
-                      <button type="button" onClick={handleSendProof} disabled={createOrder.isPending}
+                       <button type="button" onClick={() => void handleSendProof()} disabled={createOrder.isPending}
                         className="w-full bg-[#1CC88A] hover:bg-[#1CC88A]/90 text-white font-semibold py-4 px-4 rounded-[16px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 disabled:opacity-60">
                         <MessageCircle className="w-5 h-5" />
                         {t('sendProofViaWhatsApp')}

@@ -159,11 +159,15 @@ export default function Checkout() {
 
   const handlePaymentSelect = (method: PaymentMethod) => {
     setPaymentMethod(method);
-    setStep(3);
+    if (method === 'other') {
+      void handleSendProof(method);
+    } else {
+      setStep(3);
+    }
   };
 
-  const handleSendProof = async () => {
-    if (!paymentMethod || createOrder.isPending) return;
+  const handleSendProof = async (selectedMethod: Exclude<PaymentMethod, null> = paymentMethod as Exclude<PaymentMethod, null>) => {
+    if (!selectedMethod || createOrder.isPending) return;
     // Open during the click. Opening after the async order request is blocked by browsers.
     const proofWindow = window.open('', '_blank');
     if (proofWindow) {
@@ -189,7 +193,7 @@ export default function Checkout() {
           promoCode: promo.status === 'valid' ? promo.code : null,
           cashbackAmount: appliedCashback || undefined,
           referralCode: localStorage.getItem('keytopia_referral') ?? undefined,
-          paymentMethod,
+          paymentMethod: selectedMethod,
           items: items.map(item => ({
             productId: item.id,
             duration: item.selectedDuration,
@@ -204,14 +208,17 @@ export default function Checkout() {
       const cashbackLine = appliedCashback > 0
         ? `\n${isRtl ? 'الكاش باك المستخدم' : 'Cashback redeemed'}: -${cartCurrency} ${appliedCashback.toFixed(2)}`
         : '';
-      const binanceLine = paymentMethod === 'binance' && cartCurrency === 'EGP'
+      const binanceLine = selectedMethod === 'binance' && cartCurrency === 'EGP'
         ? `\n${isRtl ? 'المبلغ المحوّل عبر Binance' : 'Amount transferred via Binance'}: USD ${binanceUsdTotal}`
         : '';
-      const method = methodLabel[paymentMethod] ?? paymentMethod;
-      const receiptLine = 'هذا هو الإيصال';
-      const msg = isRtl
-        ? `مرحباً، أرسل لكم إيصال الدفع لطلبي من كيتوبيا.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}${cashbackLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}${binanceLine}\n\n[أرجو إرفاق إيصال الدفع]\n\n${receiptLine}`
-        : `Hello, I am sending payment proof for my Keytopia order.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}${cashbackLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}${binanceLine}\n\n[Please attach payment proof]\n\n${receiptLine}`;
+      const method = methodLabel[selectedMethod] ?? selectedMethod;
+      const msg = selectedMethod === 'other'
+        ? (isRtl
+          ? `مرحباً، أريد إتمام هذا الطلب عبر طريقة دفع أخرى.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}${cashbackLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}\n\nأرجو التواصل معي لتنسيق الدفع.`
+          : `Hello, I would like to complete this order using another payment method.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}${cashbackLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}\n\nPlease contact me to arrange payment.`)
+        : (isRtl
+          ? `مرحباً، أرسل لكم إيصال الدفع لطلبي من كيتوبيا.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}${cashbackLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}${binanceLine}\n\n[أرجو إرفاق إيصال الدفع]\n\nهذا هو الإيصال`
+          : `Hello, I am sending payment proof for my Keytopia order.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}${cashbackLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}${binanceLine}\n\n[Please attach payment proof]`);
       const proofUrl = `${WA_LINK}?text=${encodeURIComponent(msg)}`;
       if (proofWindow) proofWindow.location.replace(proofUrl);
       else window.location.assign(proofUrl);
@@ -672,7 +679,7 @@ export default function Checkout() {
                     <div className="bg-[#F0FFF5] border border-[#1CC88A]/30 rounded-[16px] p-4">
                       <p className="text-sm font-semibold text-foreground mb-1">{t('afterPayment')}</p>
                       <p className="text-xs text-muted-foreground mb-3">{t('sendProofExplain')}</p>
-                      <button type="button" onClick={handleSendProof} disabled={createOrder.isPending}
+                       <button type="button" onClick={() => void handleSendProof()} disabled={createOrder.isPending}
                         className="w-full bg-[#1CC88A] hover:bg-[#1CC88A]/90 text-white font-semibold py-4 px-4 rounded-[16px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 disabled:opacity-60">
                         <MessageCircle className="w-5 h-5" />
                         {t('sendProofViaWhatsApp')}

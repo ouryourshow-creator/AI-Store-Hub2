@@ -6,6 +6,12 @@ import { toast } from 'sonner';
 import { Link } from 'wouter';
 import { TrendingUp } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
+import {
+  formatProductTag,
+  getAvailabilityBadgeClass,
+  getProductBadgeClass,
+  productTagBaseClass,
+} from '../lib/productBadges';
 
 export default function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -64,7 +70,16 @@ export default function ProductCard({ product }: { product: Product }) {
           <div className="absolute top-2 end-2 md:top-4 md:end-4 bg-accent/20 backdrop-blur-md text-secondary font-semibold text-[10px] md:text-xs px-2 md:px-3 py-0.5 md:py-1 rounded-full border border-accent/30">
             {badgeDuration}
           </div>
-          <div className="absolute bottom-2 start-2 flex flex-wrap gap-1"><span className="bg-white/90 px-2 py-1 rounded-full text-[10px] font-bold capitalize">{product.availability.replaceAll('_', ' ')}</span>{product.badges.slice(0, 2).map((badge) => <span key={badge} className="bg-primary text-white px-2 py-1 rounded-full text-[10px] font-bold capitalize">{badge.replaceAll('_', ' ')}</span>)}</div>
+          <div className="absolute bottom-2 start-2 flex max-w-[92%] flex-wrap gap-1.5">
+            <span className={`${productTagBaseClass} ${getAvailabilityBadgeClass(product.availability)}`}>
+              {formatProductTag(product.availability)}
+            </span>
+            {product.badges.slice(0, 2).map((badge) => (
+              <span key={badge} className={`${productTagBaseClass} ${getProductBadgeClass(badge)}`}>
+                {formatProductTag(badge)}
+              </span>
+            ))}
+          </div>
         </div>
       </Link>
 
