@@ -507,19 +507,39 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
           .where(eq(productsTable.id, item.productId));
       }
     }
-    if (shouldCreateCashback && Number(order.total) > 0) {
-      await tx.insert(cashbackTransactionsTable).values({
-        customerId: order.customerId,
-        orderId: order.id,
-        type: "credit",
-        status: "pending",
-        currency: order.currency,
-        amount: String(Math.round(Number(order.total) * 5) / 100),
-        source: "purchase",
-      }).onConflictDoUpdate({
-        target: [cashbackTransactionsTable.orderId, cashbackTransactionsTable.type, cashbackTransactionsTable.customerId],
-        set: { status: "pending", amount: String(Math.round(Number(order.total) * 5) / 100), currency: order.currency, source: "purchase", approvedAt: null },
-      });
+    // Reconcile cashback every time a completed order is saved, not only when it
+    // first enters a completed state. This repairs orders created by an older
+    // deployment or orders whose referral profile was created slightly later.
+    // Existing pending/available rewards are preserved; only voided rewards are
+    // reopened when an order is explicitly moved back to a completed state.
+    if (completedOrderStatuses.has(order.status) && Number(order.total) > 0) {
+      const purchaseAmount = String(Math.round(Number(order.total) * 5) / 100);
+      const [existingPurchaseCredit] = await tx.select().from(cashbackTransactionsTable)
+        .where(and(
+          eq(cashbackTransactionsTable.orderId, order.id),
+          eq(cashbackTransactionsTable.type, "credit"),
+          eq(cashbackTransactionsTable.customerId, order.customerId),
+          eq(cashbackTransactionsTable.source, "purchase"),
+        )).limit(1);
+
+      if (!existingPurchaseCredit) {
+        await tx.insert(cashbackTransactionsTable).values({
+          customerId: order.customerId,
+          orderId: order.id,
+          type: "credit",
+          status: "pending",
+          currency: order.currency,
+          amount: purchaseAmount,
+          source: "purchase",
+        }).onConflictDoNothing({
+          target: [cashbackTransactionsTable.orderId, cashbackTransactionsTable.type, cashbackTransactionsTable.customerId],
+        });
+      } else if (shouldCreateCashback && existingPurchaseCredit.status === "voided") {
+        await tx.update(cashbackTransactionsTable)
+          .set({ status: "pending", amount: purchaseAmount, currency: order.currency, source: "purchase", approvedAt: null })
+          .where(eq(cashbackTransactionsTable.id, existingPurchaseCredit.id));
+      }
+
       if (order.referralCode) {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`referral:first-paid:${order.customerId}`}))`);
         const [referrer] = await tx.select().from(customerProfilesTable)
@@ -530,19 +550,33 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
             inArray(ordersTable.status, ["confirmed", "fulfilled"]),
             ne(ordersTable.id, order.id),
           )).limit(1);
+
         if (referrer && referrer.customerId !== order.customerId && !priorPaidOrder) {
-          await tx.insert(cashbackTransactionsTable).values({
-            customerId: referrer.customerId,
-            orderId: order.id,
-            type: "credit",
-            status: "pending",
-            currency: "EGP",
-            amount: "50",
-            source: "referral",
-          }).onConflictDoUpdate({
-            target: [cashbackTransactionsTable.orderId, cashbackTransactionsTable.type, cashbackTransactionsTable.customerId],
-            set: { status: "pending", amount: "50", currency: "EGP", source: "referral", approvedAt: null },
-          });
+          const [existingReferralCredit] = await tx.select().from(cashbackTransactionsTable)
+            .where(and(
+              eq(cashbackTransactionsTable.orderId, order.id),
+              eq(cashbackTransactionsTable.type, "credit"),
+              eq(cashbackTransactionsTable.customerId, referrer.customerId),
+              eq(cashbackTransactionsTable.source, "referral"),
+            )).limit(1);
+
+          if (!existingReferralCredit) {
+            await tx.insert(cashbackTransactionsTable).values({
+              customerId: referrer.customerId,
+              orderId: order.id,
+              type: "credit",
+              status: "pending",
+              currency: "EGP",
+              amount: "50",
+              source: "referral",
+            }).onConflictDoNothing({
+              target: [cashbackTransactionsTable.orderId, cashbackTransactionsTable.type, cashbackTransactionsTable.customerId],
+            });
+          } else if (shouldCreateCashback && existingReferralCredit.status === "voided") {
+            await tx.update(cashbackTransactionsTable)
+              .set({ status: "pending", amount: "50", currency: "EGP", source: "referral", approvedAt: null })
+              .where(eq(cashbackTransactionsTable.id, existingReferralCredit.id));
+          }
         }
       }
     }

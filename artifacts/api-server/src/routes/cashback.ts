@@ -14,7 +14,7 @@ import {
   ListPendingCashbackResponse,
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/requireAdmin";
-import { referralCodeFor } from "../lib/referrals";
+import { reconcileReferralRewards, referralCodeFor } from "../lib/referrals";
 
 const router: IRouter = Router();
 const CASHBACK_CURRENCIES = ["EGP", "USD"] as const;
@@ -73,6 +73,8 @@ router.get("/cashback/me", async (req, res): Promise<void> => {
     return;
   }
 
+  await reconcileReferralRewards(customerId);
+
   const rows = await db
     .select({ transaction: cashbackTransactionsTable, orderNumber: ordersTable.orderNumber })
     .from(cashbackTransactionsTable)
@@ -95,6 +97,7 @@ router.get("/referral/me", async (req, res): Promise<void> => {
   if (!profile) {
     await db.insert(customerProfilesTable).values({ customerId, referralCode }).onConflictDoNothing();
   }
+  await reconcileReferralRewards(customerId);
   const rewards = await db.select().from(cashbackTransactionsTable).where(and(
     eq(cashbackTransactionsTable.customerId, customerId),
     eq(cashbackTransactionsTable.source, "referral"),
