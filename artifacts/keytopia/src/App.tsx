@@ -120,6 +120,18 @@ function VisitTracker() {
   return null;
 }
 
+function ScrollToTop() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    // Keep intentional in-page links such as /#products working normally.
+    if (window.location.hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location]);
+
+  return null;
+}
+
 function CustomerProfileSync() {
   const { isLoaded, isSignedIn } = useAuth();
 
@@ -176,6 +188,7 @@ function ClerkProviderWithRoutes() {
         <LanguageProvider>
           <CurrencyProvider>
             <CartProvider>
+              <ScrollToTop />
               <VisitTracker />
               <CustomerProfileSync />
               <Switch>

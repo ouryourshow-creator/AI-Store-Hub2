@@ -277,7 +277,7 @@ export default function Checkout() {
 
   return (
     <Layout>
-      <div className="w-full bg-[#F7F9FC] px-4 py-8 md:py-12">
+      <div className="w-full bg-[#F7F9FC] px-4 py-8 pb-32 md:py-12 md:pb-12">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
