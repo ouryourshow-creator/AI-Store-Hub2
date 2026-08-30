@@ -313,6 +313,85 @@ export interface AdminCustomer {
   balances: AdminCustomerBalancesItem[];
 }
 
+export interface AbandonedCartItem {
+  productId: number;
+  productName: string;
+  duration: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export type AbandonedCartCurrency = typeof AbandonedCartCurrency[keyof typeof AbandonedCartCurrency];
+
+
+export const AbandonedCartCurrency = {
+  EGP: 'EGP',
+  USD: 'USD',
+} as const;
+
+export type AbandonedCartStatus = typeof AbandonedCartStatus[keyof typeof AbandonedCartStatus];
+
+
+export const AbandonedCartStatus = {
+  open: 'open',
+  recovered: 'recovered',
+  expired: 'expired',
+} as const;
+
+export interface AbandonedCart {
+  id: number;
+  cartId: string;
+  /** @nullable */
+  customerId: string | null;
+  /** @nullable */
+  customerName: string | null;
+  /** @nullable */
+  customerEmail: string | null;
+  /** @nullable */
+  customerPhone: string | null;
+  currency: AbandonedCartCurrency;
+  subtotal: number;
+  itemCount: number;
+  items: AbandonedCartItem[];
+  status: AbandonedCartStatus;
+  lastSeenAt: string;
+  createdAt: string;
+  /** @nullable */
+  recoveredAt: string | null;
+}
+
+export type SaveCartAbandonmentInputCurrency = typeof SaveCartAbandonmentInputCurrency[keyof typeof SaveCartAbandonmentInputCurrency];
+
+
+export const SaveCartAbandonmentInputCurrency = {
+  EGP: 'EGP',
+  USD: 'USD',
+} as const;
+
+export interface SaveCartAbandonmentInput {
+  cartId: string;
+  currency: SaveCartAbandonmentInputCurrency;
+  /** @minimum 0 */
+  subtotal: number;
+  /** @minimum 1 */
+  itemCount: number;
+  /** @minItems 1 */
+  items: AbandonedCartItem[];
+}
+
+export interface AdminReferral {
+  referralCode: string;
+  referrerCustomerId: string;
+  referrerName: string;
+  referrerEmail: string;
+  referredCustomers: number;
+  successfulOrders: number;
+  pendingRewardEgp: number;
+  availableRewardEgp: number;
+  /** @nullable */
+  lastActivityAt: string | null;
+}
+
 export interface PricingOption {
   duration: string;
   /** @minimum 0 */
@@ -612,6 +691,32 @@ export type AnalyticsEndDateParameter = string;
 export type GetMyReferral200 = {
   referralCode: string;
   referralCount: number;
+};
+
+export type RecoverCartAbandonment200 = {
+  ok: boolean;
+};
+
+export type ExportAdminOrdersCsvParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+startDate: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+endDate: string;
+};
+
+export type ExportAdminSalesCsvParams = {
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+startDate: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+endDate: string;
 };
 
 export type ListAdminOrdersParams = {

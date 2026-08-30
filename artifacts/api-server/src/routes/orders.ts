@@ -90,6 +90,21 @@ function mapOrder(
   };
 }
 
+function csvCell(value: unknown): string {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
+function parseReportRange(req: Request): { start: Date; end: Date; startLabel: string; endLabel: string } | null {
+  const startLabel = typeof req.query.startDate === "string" ? req.query.startDate : "";
+  const endLabel = typeof req.query.endDate === "string" ? req.query.endDate : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startLabel) || !/^\d{4}-\d{2}-\d{2}$/.test(endLabel)) return null;
+  const start = new Date(`${startLabel}T00:00:00.000Z`);
+  const end = new Date(`${endLabel}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return null;
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end, startLabel, endLabel };
+}
+
 async function withItems(orders: Array<typeof ordersTable.$inferSelect>) {
   if (!orders.length) return [];
   const items = await db
@@ -710,6 +725,92 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
     return;
   }
   res.json(UpdateOrderStatusResponse.parse(mapOrder(result.order, result.items)));
+});
+
+router.get("/admin/reports/orders.csv", requireAdmin, async (req, res): Promise<void> => {
+  const range = parseReportRange(req);
+  if (!range) {
+    res.status(400).json({ error: "Choose valid startDate and endDate values" });
+    return;
+  }
+  const orders = await db.select().from(ordersTable)
+    .where(and(gte(ordersTable.createdAt, range.start), lt(ordersTable.createdAt, range.end)))
+    .orderBy(desc(ordersTable.createdAt));
+  const orderIds = orders.map((order) => order.id);
+  const items = orderIds.length
+    ? await db.select().from(orderItemsTable).where(inArray(orderItemsTable.orderId, orderIds))
+    : [];
+  const itemsByOrderId = new Map<number, typeof items>();
+  for (const item of items) {
+    const current = itemsByOrderId.get(item.orderId) ?? [];
+    current.push(item);
+    itemsByOrderId.set(item.orderId, current);
+  }
+  const lines = [
+    ["Order number", "Created at", "Customer", "Email", "Phone", "Status", "Currency", "Subtotal", "Discount", "Total", "Promo code", "Payment method", "Items"],
+    ...orders.map((order) => [
+      order.orderNumber,
+      order.createdAt.toISOString(),
+      order.customerName,
+      order.customerEmail,
+      order.customerPhone,
+      order.status,
+      order.currency,
+      Number(order.subtotal).toFixed(2),
+      Number(order.discount).toFixed(2),
+      Number(order.total).toFixed(2),
+      order.promoCode ?? "",
+      order.paymentMethod ?? "",
+      (itemsByOrderId.get(order.id) ?? [])
+        .map((item) => `${item.productName} (${item.duration}) x${item.quantity}`)
+        .join("; "),
+    ]),
+  ];
+  const csv = `\uFEFF${lines.map((line) => line.map(csvCell).join(",")).join("\n")}\n`;
+  res
+    .status(200)
+    .setHeader("Content-Type", "text/csv; charset=utf-8")
+    .setHeader("Content-Disposition", `attachment; filename="keytopia-orders-${range.startLabel}-to-${range.endLabel}.csv"`)
+    .send(csv);
+});
+
+router.get("/admin/reports/sales.csv", requireAdmin, async (req, res): Promise<void> => {
+  const range = parseReportRange(req);
+  if (!range) {
+    res.status(400).json({ error: "Choose valid startDate and endDate values" });
+    return;
+  }
+  const orders = await db.select().from(ordersTable)
+    .where(and(
+      gte(ordersTable.createdAt, range.start),
+      lt(ordersTable.createdAt, range.end),
+      inArray(ordersTable.status, Array.from(completedOrderStatuses)),
+    ))
+    .orderBy(ordersTable.createdAt);
+  const byDate = new Map<string, { orders: number; egp: number; usd: number }>();
+  for (const order of orders) {
+    const date = order.createdAt.toISOString().slice(0, 10);
+    const current = byDate.get(date) ?? { orders: 0, egp: 0, usd: 0 };
+    current.orders += 1;
+    if (order.currency === "USD") current.usd += Number(order.total);
+    else current.egp += Number(order.total);
+    byDate.set(date, current);
+  }
+  const lines = [
+    ["Date", "Completed orders", "Sales EGP", "Sales USD"],
+    ...Array.from(byDate.entries()).map(([date, totals]) => [
+      date,
+      totals.orders,
+      totals.egp.toFixed(2),
+      totals.usd.toFixed(2),
+    ]),
+  ];
+  const csv = `\uFEFF${lines.map((line) => line.map(csvCell).join(",")).join("\n")}\n`;
+  res
+    .status(200)
+    .setHeader("Content-Type", "text/csv; charset=utf-8")
+    .setHeader("Content-Disposition", `attachment; filename="keytopia-sales-${range.startLabel}-to-${range.endLabel}.csv"`)
+    .send(csv);
 });
 
 router.get("/admin/dashboard", requireAdmin, async (req, res): Promise<void> => {

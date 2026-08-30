@@ -25,6 +25,9 @@ import AdminCashback from '../components/AdminCashback';
 import AdminUsers from '../components/AdminUsers';
 import AdminReviews from '../components/AdminReviews';
 import AdminSettings from '../components/AdminSettings';
+import AdminAbandonedCarts from '../components/AdminAbandonedCarts';
+import AdminReferrals from '../components/AdminReferrals';
+import AdminReports from '../components/AdminReports';
 
 type Tab =
   | 'dashboard' | 'visits' | 'sales' | 'orders' | 'users' | 'cashback' | 'products'
@@ -45,11 +48,11 @@ const primaryNavigation: NavItem[] = [
   { tab: 'users', icon: Users, label: 'Customers', labelAr: 'العملاء' },
   { tab: 'products', icon: Package, label: 'Products', labelAr: 'المنتجات' },
   { tab: 'cashback', icon: Gift, label: 'Cashback', labelAr: 'الكاش باك' },
-  { tab: 'referrals', icon: GitBranch, label: 'Referrals', labelAr: 'الإحالات', available: false },
-  { tab: 'coupons', icon: TicketPercent, label: 'Coupons', labelAr: 'أكواد الخصم', available: false },
-  { tab: 'abandoned', icon: ArchiveX, label: 'Abandoned carts', labelAr: 'السلات المتروكة', available: false },
+  { tab: 'referrals', icon: GitBranch, label: 'Referrals', labelAr: 'الإحالات' },
+  { tab: 'coupons', icon: TicketPercent, label: 'Coupons', labelAr: 'أكواد الخصم' },
+  { tab: 'abandoned', icon: ArchiveX, label: 'Abandoned carts', labelAr: 'السلات المتروكة' },
   { tab: 'visits', icon: BarChart3, label: 'Analytics', labelAr: 'التحليلات' },
-  { tab: 'reports', icon: FileSpreadsheet, label: 'Reports', labelAr: 'التقارير', available: false },
+  { tab: 'reports', icon: FileSpreadsheet, label: 'Reports', labelAr: 'التقارير' },
 ];
 
 const supportNavigation: NavItem[] = [
@@ -480,11 +483,12 @@ export default function Admin() {
 
         {activeTab === 'settings' && <AdminSettings />}
 
-        {activeTab === 'referrals' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'referrals')!} dir={dir} />}
+        {activeTab === 'referrals' && <AdminReferrals />}
 
-        {activeTab === 'coupons' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'coupons')!} dir={dir} />}
 
-        {activeTab === 'abandoned' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'abandoned')!} dir={dir} />}
+        {activeTab === 'abandoned' && <AdminAbandonedCarts />}
+
+        {activeTab === 'reports' && <AdminReports />}
 
         {activeTab === 'reports' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'reports')!} dir={dir} />}
 
@@ -678,7 +682,7 @@ export default function Admin() {
         )}
 
         {/* ── Promo Codes tab ── */}
-        {activeTab === 'promo' && (
+        {(activeTab === 'promo' || activeTab === 'coupons') && (
           <>
             <div className="mb-6">
               <h1 className="text-3xl font-display font-bold text-foreground">{t('promoCodes')}</h1>
