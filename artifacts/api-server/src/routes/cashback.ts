@@ -11,6 +11,7 @@ import {
   ApproveCashbackParams,
   ApproveCashbackResponse,
   GetMyCashbackResponse,
+  ListAdminUsersResponse,
   ListPendingCashbackResponse,
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/requireAdmin";
@@ -184,7 +185,7 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
     const ledger = ledgerByCustomer.get(transaction.customerId) ?? [];
     ledger.push(transaction); ledgerByCustomer.set(transaction.customerId, ledger);
   }
-  res.json(customerIds.map((customerId) => {
+  res.json(ListAdminUsersResponse.parse(customerIds.map((customerId) => {
     const latestOrder = latestOrderByCustomer.get(customerId);
     const ledger = ledgerByCustomer.get(customerId) ?? [];
     return {
@@ -195,7 +196,7 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
       balances: buildBalances(ledger),
       orderCount: orderCountByCustomer.get(customerId) ?? 0,
     };
-  }));
+  })));
 });
 
 router.post("/admin/users/:customerId/cashback", requireAdmin, async (req, res): Promise<void> => {

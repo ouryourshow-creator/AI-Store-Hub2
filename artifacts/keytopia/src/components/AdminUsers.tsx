@@ -1,58 +1,52 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Search, UserRound, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getListAdminUsersQueryKey,
+  useListAdminUsers,
+  type AdminCustomer,
+} from "@workspace/api-client-react";
 
 type Balance = { currency: "EGP" | "USD"; pending: number; available: number };
-type Customer = {
-  customerId: string;
-  name: string;
-  email: string;
-  referralCode: string | null;
-  orderCount: number;
-  balances: Balance[];
-};
+type Customer = AdminCustomer & { balances: Balance[] };
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: users = [], isLoading: loading, isError } = useListAdminUsers({
+    query: { queryKey: getListAdminUsersQueryKey() },
+  });
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Customer | null>(null);
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"EGP" | "USD">("EGP");
   const [operation, setOperation] = useState<"add" | "deduct">("add");
-
-  const load = () =>
-    fetch("/api/admin/users", { credentials: "include" })
-      .then((response) => {
-        if (!response.ok) throw new Error();
-        return response.json();
-      })
-      .then(setUsers)
-      .catch(() => toast.error("Could not load customers"))
-      .finally(() => setLoading(false));
-  useEffect(() => {
-    void load();
-  }, []);
+  const [saving, setSaving] = useState(false);
 
   const save = async () => {
     if (!editing) return;
-    const response = await fetch(
-      `/api/admin/users/${encodeURIComponent(editing.customerId)}/cashback`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(amount), currency, operation }),
-      },
-    );
-    if (!response.ok) {
-      toast.error("Could not update cashback");
-      return;
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(editing.customerId)}/cashback`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: Number(amount), currency, operation }),
+        },
+      );
+      if (!response.ok) {
+        toast.error("Could not update cashback");
+        return;
+      }
+      toast.success("Cashback updated");
+      setEditing(null);
+      setAmount("");
+      await queryClient.invalidateQueries({ queryKey: getListAdminUsersQueryKey() });
+    } finally {
+      setSaving(false);
     }
-    toast.success("Cashback updated");
-    setEditing(null);
-    setAmount("");
-    await load();
   };
   const filtered = users.filter((user) =>
     `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase()),
@@ -91,6 +85,12 @@ export default function AdminUsers() {
               <tr>
                 <td colSpan={5} className="p-10 text-center">
                   Loading…
+                </td>
+              </tr>
+            ) : isError ? (
+              <tr>
+                <td colSpan={5} className="p-10 text-center text-red-600">
+                  Could not load customers. Please try again.
                 </td>
               </tr>
             ) : (
@@ -184,10 +184,10 @@ export default function AdminUsers() {
               </button>
               <button
                 onClick={save}
-                disabled={!amount || Number(amount) <= 0}
+                disabled={saving || !amount || Number(amount) <= 0}
                 className="flex-1 bg-primary text-white rounded-xl p-3 disabled:opacity-50"
               >
-                Save
+                {saving ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

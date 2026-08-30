@@ -281,6 +281,38 @@ export interface AdminDashboard {
   trends: DashboardTrend[];
 }
 
+export interface AdminOrdersPage {
+  items: Order[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export type AdminCustomerBalancesItemCurrency = typeof AdminCustomerBalancesItemCurrency[keyof typeof AdminCustomerBalancesItemCurrency];
+
+
+export const AdminCustomerBalancesItemCurrency = {
+  EGP: 'EGP',
+  USD: 'USD',
+} as const;
+
+export type AdminCustomerBalancesItem = {
+  currency: AdminCustomerBalancesItemCurrency;
+  pending: number;
+  available: number;
+};
+
+export interface AdminCustomer {
+  customerId: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  referralCode: string | null;
+  orderCount: number;
+  balances: AdminCustomerBalancesItem[];
+}
+
 export interface PricingOption {
   duration: string;
   /** @minimum 0 */
@@ -585,6 +617,32 @@ export type GetMyReferral200 = {
 export type ListAdminOrdersParams = {
 search?: string;
 status?: string;
+};
+
+export type GetAdminOrdersPageParams = {
+search?: string;
+status?: string;
+/**
+ * @minimum 1
+ */
+page?: number;
+pageSize?: GetAdminOrdersPagePageSize;
+};
+
+export type GetAdminOrdersPagePageSize = typeof GetAdminOrdersPagePageSize[keyof typeof GetAdminOrdersPagePageSize];
+
+
+export const GetAdminOrdersPagePageSize = {
+  NUMBER_10: 10,
+  NUMBER_25: 25,
+  NUMBER_50: 50,
+  NUMBER_100: 100,
+} as const;
+
+export type GetAdminDashboardParams = {
+preset?: AnalyticsPresetParameter;
+startDate?: AnalyticsStartDateParameter;
+endDate?: AnalyticsEndDateParameter;
 };
 
 export type GetAdminVisitsAnalyticsParams = {

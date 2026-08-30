@@ -22,11 +22,15 @@ import type {
 import type {
   AdjustUserCashbackInput,
   AdminCashbackTransaction,
+  AdminCustomer,
   AdminDashboard,
+  AdminOrdersPage,
   Category,
   CategoryInput,
   EgpUsdRate,
   EgpUsdRateInput,
+  GetAdminDashboardParams,
+  GetAdminOrdersPageParams,
   GetAdminSalesAnalyticsParams,
   GetAdminVisitsAnalyticsParams,
   GetMyReferral200,
@@ -1874,9 +1878,9 @@ export const getListAdminUsersUrl = () => {
 /**
  * @summary List customers and cashback balances
  */
-export const listAdminUsers = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const listAdminUsers = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminCustomer[]> => {
 
-  return customFetch<void>(getListAdminUsersUrl(),
+  return customFetch<AdminCustomer[]>(getListAdminUsersUrl(),
   {
     ...options,
     method: 'GET'
@@ -2167,6 +2171,90 @@ export function useListAdminOrders<TData = Awaited<ReturnType<typeof listAdminOr
 
 
 
+export const getGetAdminOrdersPageUrl = (params?: GetAdminOrdersPageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/orders/page?${stringifiedParams}` : `/api/admin/orders/page`
+}
+
+/**
+ * @summary Get a paginated admin order list
+ */
+export const getAdminOrdersPage = async (params?: GetAdminOrdersPageParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminOrdersPage> => {
+
+  return customFetch<AdminOrdersPage>(getGetAdminOrdersPageUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminOrdersPageQueryKey = (params?: GetAdminOrdersPageParams,) => {
+    return [
+    `/api/admin/orders/page`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminOrdersPageQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOrdersPage>>, TError = ErrorType<void>>(params?: GetAdminOrdersPageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOrdersPage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminOrdersPageQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOrdersPage>>> = ({ signal }) => getAdminOrdersPage(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOrdersPage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminOrdersPageQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOrdersPage>>>
+export type GetAdminOrdersPageQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get a paginated admin order list
+ */
+
+export function useGetAdminOrdersPage<TData = Awaited<ReturnType<typeof getAdminOrdersPage>>, TError = ErrorType<void>>(
+ params?: GetAdminOrdersPageParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOrdersPage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminOrdersPageQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getUpdateOrderStatusUrl = (id: number,) => {
 
 
@@ -2239,20 +2327,27 @@ export const useUpdateOrderStatus = <TError = ErrorType<void>,
       return useMutation(getUpdateOrderStatusMutationOptions(options));
     }
 
-export const getGetAdminDashboardUrl = () => {
+export const getGetAdminDashboardUrl = (params?: GetAdminDashboardParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/admin/dashboard`
+  return stringifiedParams.length > 0 ? `/api/admin/dashboard?${stringifiedParams}` : `/api/admin/dashboard`
 }
 
 /**
- * @summary Get store sales and visitor analytics
+ * @summary Get date-filtered store sales and visitor analytics
  */
-export const getAdminDashboard = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminDashboard> => {
+export const getAdminDashboard = async (params?: GetAdminDashboardParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminDashboard> => {
 
-  return customFetch<AdminDashboard>(getGetAdminDashboardUrl(),
+  return customFetch<AdminDashboard>(getGetAdminDashboardUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2265,23 +2360,23 @@ export const getAdminDashboard = async ( options?: Parameters<typeof customFetch
 
 
 
-export const getGetAdminDashboardQueryKey = () => {
+export const getGetAdminDashboardQueryKey = (params?: GetAdminDashboardParams,) => {
     return [
-    `/api/admin/dashboard`
+    `/api/admin/dashboard`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetAdminDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetAdminDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<void>>(params?: GetAdminDashboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAdminDashboardQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDashboardQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDashboard>>> = ({ signal }) => getAdminDashboard({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDashboard>>> = ({ signal }) => getAdminDashboard(params, { signal, ...requestOptions });
 
 
 
@@ -2291,19 +2386,19 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetAdminDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDashboard>>>
-export type GetAdminDashboardQueryError = ErrorType<unknown>
+export type GetAdminDashboardQueryError = ErrorType<void>
 
 
 /**
- * @summary Get store sales and visitor analytics
+ * @summary Get date-filtered store sales and visitor analytics
  */
 
-export function useGetAdminDashboard<TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useGetAdminDashboard<TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<void>>(
+ params?: GetAdminDashboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetAdminDashboardQueryOptions(options)
+  const queryOptions = getGetAdminDashboardQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

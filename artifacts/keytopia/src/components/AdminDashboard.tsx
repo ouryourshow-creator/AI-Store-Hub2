@@ -1,20 +1,82 @@
-import { useGetAdminDashboard, getGetAdminDashboardQueryKey } from '@workspace/api-client-react';
+import { useState } from 'react';
+import {
+  useGetAdminDashboard,
+  getGetAdminDashboardQueryKey,
+  type AnalyticsPresetParameter,
+  type GetAdminDashboardParams,
+} from '@workspace/api-client-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { DollarSign, ShoppingBag, Eye, MapPin, Package, Activity, type LucideIcon } from 'lucide-react';
+import { DollarSign, ShoppingBag, Eye, MapPin, Package, Activity, CalendarDays, type LucideIcon } from 'lucide-react';
 import { useLang } from '../contexts/LanguageContext';
 import { getCountryName } from '../lib/countryNames';
 
+const dashboardPresets: Array<{ value: AnalyticsPresetParameter; en: string; ar: string }> = [
+  { value: 'today', en: 'Today', ar: 'اليوم' },
+  { value: 'yesterday', en: 'Yesterday', ar: 'أمس' },
+  { value: 'last_week', en: 'Last week', ar: 'الأسبوع الماضي' },
+  { value: 'last_2_weeks', en: 'Last 2 weeks', ar: 'آخر أسبوعين' },
+  { value: 'last_month', en: 'Last month', ar: 'آخر شهر' },
+  { value: 'last_3_months', en: 'Last 3 months', ar: 'آخر 3 أشهر' },
+  { value: 'last_6_months', en: 'Last 6 months', ar: 'آخر 6 أشهر' },
+  { value: 'year', en: 'Year', ar: 'السنة الماضية' },
+  { value: 'custom', en: 'Custom range', ar: 'نطاق مخصص' },
+];
+
 export default function AdminDashboard() {
   const { dir } = useLang();
-  const { data: dashboard, isLoading, error } = useGetAdminDashboard({
+  const [preset, setPreset] = useState<AnalyticsPresetParameter>('last_month');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const customRange = preset === 'custom';
+  const datesReady = !customRange || (Boolean(startDate) && Boolean(endDate));
+  const invalidRange = customRange && Boolean(startDate && endDate && startDate > endDate);
+  const params: GetAdminDashboardParams = customRange
+    ? { preset, startDate: startDate || undefined, endDate: endDate || undefined }
+    : { preset };
+  const { data: dashboard, isLoading, error } = useGetAdminDashboard(params, {
     query: {
-      queryKey: getGetAdminDashboardQueryKey()
+      enabled: datesReady && !invalidRange,
+      queryKey: getGetAdminDashboardQueryKey(params),
     }
   });
+
+  const validationMessage = invalidRange
+    ? (dir === 'rtl' ? 'يجب أن يكون تاريخ النهاية في أو بعد تاريخ البداية.' : 'The end date must be on or after the start date.')
+    : customRange && !datesReady
+      ? (dir === 'rtl' ? 'اختر تاريخ البداية والنهاية.' : 'Choose both a start and end date.')
+      : null;
+
+  if (validationMessage) {
+    return (
+      <div className="space-y-6">
+        <DashboardDateFilter
+          dir={dir}
+          preset={preset}
+          setPreset={setPreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+        />
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center text-sm font-medium text-amber-800">
+          {validationMessage}
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
       <div className="space-y-6">
+        <DashboardDateFilter
+          dir={dir}
+          preset={preset}
+          setPreset={setPreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+        />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[1, 2, 3].map(i => (
             <div key={i} className="bg-white p-6 rounded-[24px] h-32 animate-pulse border border-black/[0.03]" />
@@ -27,10 +89,21 @@ export default function AdminDashboard() {
 
   if (error || !dashboard) {
     return (
-      <div className="bg-red-50 text-red-600 p-6 rounded-[24px] border border-red-100 flex items-center justify-center text-center">
-        <div>
-          <h3 className="font-semibold text-lg mb-1">{dir === 'rtl' ? 'حدث خطأ' : 'Error loading dashboard'}</h3>
-          <p className="text-sm opacity-80">{dir === 'rtl' ? 'تعذر تحميل الإحصائيات' : 'Could not load statistics'}</p>
+      <div className="space-y-6">
+        <DashboardDateFilter
+          dir={dir}
+          preset={preset}
+          setPreset={setPreset}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+        />
+        <div className="flex items-center justify-center rounded-2xl border border-red-100 bg-red-50 p-6 text-center text-red-600">
+          <div>
+            <h3 className="mb-1 text-lg font-semibold">{dir === 'rtl' ? 'حدث خطأ' : 'Error loading dashboard'}</h3>
+            <p className="text-sm opacity-80">{dir === 'rtl' ? 'تعذر تحميل الإحصائيات' : 'Could not load statistics'}</p>
+          </div>
         </div>
       </div>
     );
@@ -61,6 +134,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      <DashboardDateFilter
+        dir={dir}
+        preset={preset}
+        setPreset={setPreset}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+      />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard
           title={dir === 'rtl' ? 'إجمالي المبيعات' : 'Total Sales'}
@@ -190,5 +272,72 @@ export default function AdminDashboard() {
         </section>
       </div>
     </div>
+  );
+}
+
+function DashboardDateFilter({
+  dir,
+  preset,
+  setPreset,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+}: {
+  dir: 'rtl' | 'ltr';
+  preset: AnalyticsPresetParameter;
+  setPreset: (value: AnalyticsPresetParameter) => void;
+  startDate: string;
+  setStartDate: (value: string) => void;
+  endDate: string;
+  setEndDate: (value: string) => void;
+}) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className={`flex flex-col gap-3 ${preset === 'custom' ? 'lg:grid lg:grid-cols-[minmax(0,1fr)_auto_auto]' : 'sm:flex-row sm:items-end sm:justify-between'}`}>
+        <label className="block">
+          <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            {dir === 'rtl' ? 'الفترة' : 'Reporting period'}
+          </span>
+          <select
+            value={preset}
+            onChange={(event) => setPreset(event.target.value as AnalyticsPresetParameter)}
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+          >
+            {dashboardPresets.map((option) => (
+              <option key={option.value} value={option.value}>{dir === 'rtl' ? option.ar : option.en}</option>
+            ))}
+          </select>
+        </label>
+        {preset === 'custom' && (
+          <>
+            <label className="block">
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{dir === 'rtl' ? 'من' : 'From'}</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{dir === 'rtl' ? 'إلى' : 'To'}</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10"
+              />
+            </label>
+          </>
+        )}
+        {preset !== 'custom' && (
+          <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 sm:flex">
+            <CalendarDays className="h-4 w-4 text-primary" />
+            {dir === 'rtl' ? 'كل أرقام هذه الصفحة للفترة المختارة' : 'All metrics reflect the selected period'}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

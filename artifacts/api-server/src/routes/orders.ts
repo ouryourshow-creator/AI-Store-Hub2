@@ -17,7 +17,10 @@ import {
 import {
   CreateOrderBody,
   CreateOrderResponse,
+  GetAdminDashboardQueryParams,
   GetAdminDashboardResponse,
+  GetAdminOrdersPageQueryParams,
+  GetAdminOrdersPageResponse,
   GetAdminSalesAnalyticsQueryParams,
   GetAdminSalesAnalyticsResponse,
   GetAdminVisitsAnalyticsQueryParams,
@@ -36,6 +39,11 @@ import { referralCodeFor } from "../lib/referrals";
 const router: IRouter = Router();
 const orderStatuses = new Set(["awaiting_payment", "payment_proof_received", "confirmed", "fulfilled", "cancelled"]);
 const completedOrderStatuses = new Set(["confirmed", "fulfilled"]);
+const adminOrderStatusGroups: Record<string, string[]> = {
+  pending_payment: ["awaiting_payment", "payment_proof_received"],
+  paid: ["confirmed", "fulfilled"],
+  cancelled: ["cancelled"],
+};
 const analyticsPresets = new Set([
   "today",
   "yesterday",
@@ -474,6 +482,48 @@ router.get("/admin/orders", requireAdmin, async (req, res): Promise<void> => {
   res.json(ListAdminOrdersResponse.parse(await withItems(orders)));
 });
 
+router.get("/admin/orders/page", requireAdmin, async (req, res): Promise<void> => {
+  const query = GetAdminOrdersPageQueryParams.safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: query.error.message });
+    return;
+  }
+
+  const { search, status, page, pageSize } = query.data;
+  const conditions = [];
+  if (status) {
+    const groupedStatuses = adminOrderStatusGroups[status];
+    conditions.push(groupedStatuses ? inArray(ordersTable.status, groupedStatuses) : eq(ordersTable.status, status));
+  }
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`;
+    conditions.push(or(
+      ilike(ordersTable.orderNumber, term),
+      ilike(ordersTable.customerName, term),
+      ilike(ordersTable.customerEmail, term),
+      ilike(ordersTable.customerPhone, term),
+    ));
+  }
+
+  const where = conditions.length ? and(...conditions) : undefined;
+  const [{ total }] = await db.select({ total: sql<number>`count(*)` })
+    .from(ordersTable)
+    .where(where);
+  const orders = await db.select().from(ordersTable)
+    .where(where)
+    .orderBy(desc(ordersTable.createdAt), desc(ordersTable.id))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
+
+  res.json(GetAdminOrdersPageResponse.parse({
+    items: await withItems(orders),
+    page,
+    pageSize,
+    total: Number(total),
+    totalPages: Math.ceil(Number(total) / pageSize),
+  }));
+});
+
 router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise<void> => {
   const params = UpdateOrderStatusParams.safeParse(req.params);
   const body = UpdateOrderStatusBody.safeParse(req.body);
@@ -662,39 +712,60 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
   res.json(UpdateOrderStatusResponse.parse(mapOrder(result.order, result.items)));
 });
 
-router.get("/admin/dashboard", requireAdmin, async (_req, res): Promise<void> => {
-  const since = new Date();
-  since.setDate(since.getDate() - 29);
+router.get("/admin/dashboard", requireAdmin, async (req, res): Promise<void> => {
+  const query = GetAdminDashboardQueryParams.safeParse(req.query);
+  const range = query.success ? resolveAnalyticsRange(req.query) : null;
+  if (!range) {
+    res.status(400).json({ error: "Choose a valid date range with an end date on or after the start date" });
+    return;
+  }
+  const orderRangeCondition = and(
+    gte(ordersTable.createdAt, range.start),
+    lt(ordersTable.createdAt, range.endExclusive),
+  );
+  const visitRangeCondition = and(
+    gte(analyticsVisitsTable.createdAt, range.start),
+    lt(analyticsVisitsTable.createdAt, range.endExclusive),
+  );
   const [orderTotals] = await db.select({
     count: sql<number>`count(*)`,
     sales: sql<number>`coalesce(sum(case when ${ordersTable.status} in ('confirmed', 'fulfilled') and ${ordersTable.currency} = 'EGP' then ${ordersTable.total} else 0 end), 0)`,
     salesUsd: sql<number>`coalesce(sum(case when ${ordersTable.status} in ('confirmed', 'fulfilled') and ${ordersTable.currency} = 'USD' then ${ordersTable.total} else 0 end), 0)`,
-  }).from(ordersTable);
-  const [visitTotals] = await db.select({ count: sql<number>`count(*)` }).from(analyticsVisitsTable);
+  }).from(ordersTable).where(orderRangeCondition);
+  const [visitTotals] = await db.select({ count: sql<number>`count(*)` })
+    .from(analyticsVisitsTable)
+    .where(visitRangeCondition);
   const countries = await db.select({
     country: analyticsVisitsTable.countryCode,
     visits: sql<number>`count(*)`,
-  }).from(analyticsVisitsTable).groupBy(analyticsVisitsTable.countryCode).orderBy(desc(sql`count(*)`)).limit(8);
+  }).from(analyticsVisitsTable)
+    .where(visitRangeCondition)
+    .groupBy(analyticsVisitsTable.countryCode)
+    .orderBy(desc(sql`count(*)`))
+    .limit(8);
   const products = await db.select({
     productId: productsTable.id,
     productName: productsTable.name,
     sold: productsTable.soldCount,
     views: sql<number>`coalesce(count(${analyticsVisitsTable.id}), 0)`,
   }).from(productsTable)
-    .leftJoin(analyticsVisitsTable, eq(analyticsVisitsTable.productId, productsTable.id))
+    .leftJoin(analyticsVisitsTable, and(
+      eq(analyticsVisitsTable.productId, productsTable.id),
+      visitRangeCondition,
+    ))
     .groupBy(productsTable.id)
     .orderBy(desc(sql`coalesce(count(${analyticsVisitsTable.id}), 0)`))
     .limit(8);
   const visitsByDate = await db.select({
     date: sql<string>`to_char(${analyticsVisitsTable.createdAt}::date, 'YYYY-MM-DD')`,
     visits: sql<number>`count(*)`,
-  }).from(analyticsVisitsTable).where(gte(analyticsVisitsTable.createdAt, since))
+  }).from(analyticsVisitsTable).where(visitRangeCondition)
     .groupBy(sql`${analyticsVisitsTable.createdAt}::date`);
   const ordersByDate = await db.select({
     date: sql<string>`to_char(${ordersTable.createdAt}::date, 'YYYY-MM-DD')`,
     orders: sql<number>`count(*)`,
     sales: sql<number>`coalesce(sum(case when ${ordersTable.status} in ('confirmed', 'fulfilled') and ${ordersTable.currency} = 'EGP' then ${ordersTable.total} else 0 end), 0)`,
-  }).from(ordersTable).where(gte(ordersTable.createdAt, since))
+  }).from(ordersTable).where(orderRangeCondition)
     .groupBy(sql`${ordersTable.createdAt}::date`);
   const visitMap = new Map(visitsByDate.map((row) => [row.date, Number(row.visits)]));
   const orderMap = new Map(ordersByDate.map((row) => [row.date, { orders: Number(row.orders), sales: Number(row.sales) }]));

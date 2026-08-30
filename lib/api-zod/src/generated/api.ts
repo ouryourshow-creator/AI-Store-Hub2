@@ -848,7 +848,19 @@ export const GetMyReferralResponse = zod.object({
 /**
  * @summary List customers and cashback balances
  */
-export const ListAdminUsersResponse = zod.unknown()
+export const ListAdminUsersResponseItem = zod.object({
+  "customerId": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "referralCode": zod.string().nullable(),
+  "orderCount": zod.number(),
+  "balances": zod.array(zod.object({
+  "currency": zod.enum(['EGP', 'USD']),
+  "pending": zod.number(),
+  "available": zod.number()
+}))
+})
+export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
 
 
 /**
@@ -932,6 +944,54 @@ export const ListAdminOrdersResponse = zod.array(ListAdminOrdersResponseItem)
 
 
 /**
+ * @summary Get a paginated admin order list
+ */
+export const getAdminOrdersPageQueryPageDefault = 1;
+
+export const getAdminOrdersPageQueryPageSizeDefault = 25;
+
+export const GetAdminOrdersPageQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "page": zod.coerce.number().int().min(1).default(getAdminOrdersPageQueryPageDefault),
+  "pageSize": zod.union([zod.literal(10),zod.literal(25),zod.literal(50),zod.literal(100)]).default(getAdminOrdersPageQueryPageSizeDefault)
+})
+
+export const GetAdminOrdersPageResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.union([zod.string(),zod.number()]),
+  "customerName": zod.string(),
+  "customerEmail": zod.string(),
+  "customerPhone": zod.string(),
+  "currency": zod.string(),
+  "subtotal": zod.number(),
+  "discount": zod.number(),
+  "total": zod.number(),
+  "promoCode": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "coverImageUrl": zod.string().nullish(),
+  "duration": zod.string(),
+  "unitPrice": zod.number(),
+  "quantity": zod.number(),
+  "lineTotal": zod.number()
+})),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "total": zod.number(),
+  "totalPages": zod.number()
+})
+
+
+/**
  * @summary Update an order status
  */
 export const UpdateOrderStatusParams = zod.object({
@@ -971,8 +1031,16 @@ export const UpdateOrderStatusResponse = zod.object({
 
 
 /**
- * @summary Get store sales and visitor analytics
+ * @summary Get date-filtered store sales and visitor analytics
  */
+export const getAdminDashboardQueryPresetDefault = `last_month`;
+
+export const GetAdminDashboardQueryParams = zod.object({
+  "preset": zod.enum(['today', 'yesterday', 'last_week', 'last_2_weeks', 'last_month', 'last_3_months', 'last_6_months', 'year', 'custom']).default(getAdminDashboardQueryPresetDefault),
+  "startDate": zod.coerce.string().optional(),
+  "endDate": zod.coerce.string().optional()
+})
+
 export const GetAdminDashboardResponse = zod.object({
   "totalSales": zod.number(),
   "totalSalesUsd": zod.number(),
