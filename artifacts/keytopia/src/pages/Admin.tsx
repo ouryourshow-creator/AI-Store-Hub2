@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useUser, useClerk } from '@clerk/react';
 import {
   useListAdminProducts, getListAdminProductsQueryKey,
@@ -8,7 +8,12 @@ import {
   useListCategories, useCreateCategory, useDeleteCategory, getListCategoriesQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, Plus, Pencil, Trash2, LogOut, Search, Tag, X, Layers, Eye, EyeOff, Gift } from 'lucide-react';
+import {
+  ShieldAlert, Plus, Pencil, Trash2, LogOut, Search, Tag, X, Layers, Eye, EyeOff,
+  Gift, LayoutDashboard, ShoppingCart, Users, Package, BarChart3, GitBranch,
+  TicketPercent, ArchiveX, FileSpreadsheet, Menu, ChevronLeft, ChevronRight,
+  Settings, MessageSquareQuote, type LucideIcon,
+} from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { toast } from 'sonner';
 import { useLang } from '../contexts/LanguageContext';
@@ -21,15 +26,107 @@ import AdminUsers from '../components/AdminUsers';
 import AdminReviews from '../components/AdminReviews';
 import AdminSettings from '../components/AdminSettings';
 
-type Tab = 'dashboard' | 'visits' | 'sales' | 'orders' | 'users' | 'cashback' | 'products' | 'reviews' | 'promo' | 'categories' | 'settings';
+type Tab =
+  | 'dashboard' | 'visits' | 'sales' | 'orders' | 'users' | 'cashback' | 'products'
+  | 'reviews' | 'promo' | 'categories' | 'settings' | 'referrals' | 'coupons'
+  | 'abandoned' | 'reports';
+
+type NavItem = {
+  tab: Tab;
+  icon: LucideIcon;
+  label: string;
+  labelAr: string;
+  available?: boolean;
+};
+
+const primaryNavigation: NavItem[] = [
+  { tab: 'dashboard', icon: LayoutDashboard, label: 'Overview', labelAr: 'نظرة عامة' },
+  { tab: 'orders', icon: ShoppingCart, label: 'Orders', labelAr: 'الطلبات' },
+  { tab: 'users', icon: Users, label: 'Customers', labelAr: 'العملاء' },
+  { tab: 'products', icon: Package, label: 'Products', labelAr: 'المنتجات' },
+  { tab: 'cashback', icon: Gift, label: 'Cashback', labelAr: 'الكاش باك' },
+  { tab: 'referrals', icon: GitBranch, label: 'Referrals', labelAr: 'الإحالات', available: false },
+  { tab: 'coupons', icon: TicketPercent, label: 'Coupons', labelAr: 'أكواد الخصم', available: false },
+  { tab: 'abandoned', icon: ArchiveX, label: 'Abandoned carts', labelAr: 'السلات المتروكة', available: false },
+  { tab: 'visits', icon: BarChart3, label: 'Analytics', labelAr: 'التحليلات' },
+  { tab: 'reports', icon: FileSpreadsheet, label: 'Reports', labelAr: 'التقارير', available: false },
+];
+
+const supportNavigation: NavItem[] = [
+  { tab: 'sales', icon: BarChart3, label: 'Sales report', labelAr: 'تقرير المبيعات' },
+  { tab: 'reviews', icon: MessageSquareQuote, label: 'Reviews', labelAr: 'التقييمات' },
+  { tab: 'categories', icon: Layers, label: 'Categories', labelAr: 'الفئات' },
+  { tab: 'promo', icon: Tag, label: 'Promo codes', labelAr: 'أكواد الخصم الحالية' },
+  { tab: 'settings', icon: Settings, label: 'Settings', labelAr: 'الإعدادات' },
+];
+
+const allTabs = new Set<Tab>([
+  ...primaryNavigation.map((item) => item.tab),
+  ...supportNavigation.map((item) => item.tab),
+]);
+
+function tabFromLocation(location: string): Tab {
+  const query = location.includes('?') ? location.slice(location.indexOf('?') + 1) : '';
+  const requested = new URLSearchParams(query).get('section');
+  return requested && allTabs.has(requested as Tab) ? requested as Tab : 'dashboard';
+}
+
+function AdminModulePlaceholder({ item, dir }: { item: NavItem; dir: 'rtl' | 'ltr' }) {
+  const Icon = item.icon;
+  return (
+    <div className="min-h-[420px] flex items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white">
+      <div className="max-w-md px-6 text-center">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-primary">
+          <Icon className="h-7 w-7" />
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+          {dir === 'rtl' ? item.labelAr : item.label}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-slate-500">
+          {dir === 'rtl'
+            ? 'هذه الوحدة ستظهر هنا بعد ربط بياناتها الحقيقية. لن يتم عرض أرقام تجريبية.'
+            : 'This workspace will appear here once its real data is connected. No sample metrics are shown.'}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function Admin() {
   const { isLoaded, isSignedIn } = useUser();
   const { signOut } = useClerk();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const { t, dir } = useLang();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [globalSearch, setGlobalSearch] = useState('');
+
+  useEffect(() => {
+    setActiveTab(tabFromLocation(location));
+  }, [location]);
+
+  useEffect(() => {
+    const query = location.includes('?') ? location.slice(location.indexOf('?') + 1) : '';
+    const requestedSearch = new URLSearchParams(query).get('search') ?? '';
+    setGlobalSearch(requestedSearch);
+    if (tabFromLocation(location) === 'products') setSearch(requestedSearch);
+  }, [location]);
+
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+    setLocation(`/admin?section=${tab}`);
+  };
+
+  const submitGlobalSearch = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    const value = globalSearch.trim();
+    setActiveTab('products');
+    setLocation(value ? `/admin?section=products&search=${encodeURIComponent(value)}` : '/admin?section=products');
+    setSidebarOpen(false);
+  };
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) setLocation('/sign-in');
@@ -50,7 +147,6 @@ export default function Admin() {
   const { data: products, isLoading } = useListAdminProducts({
     query: { enabled: isAdmin === true, queryKey: getListAdminProductsQueryKey() },
   });
-  const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -217,43 +313,157 @@ export default function Admin() {
 
   const filteredProducts = products?.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) || [];
   const inputCls = "w-full bg-muted border border-transparent rounded-[10px] px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all";
+  const activeNavItem = [...primaryNavigation, ...supportNavigation].find((item) => item.tab === activeTab) ?? primaryNavigation[0];
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[#F7F9FC]" dir={dir}>
-      <header className="bg-white border-b border-black/[0.03] px-6 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="font-display font-bold text-xl text-secondary">Keytopia</Link>
-          <span className="px-2 py-1 bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-wider rounded">Admin</span>
+    <div className="min-h-[100dvh] flex flex-col bg-[#f5f7fb] text-slate-900" dir={dir}>
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label={dir === 'rtl' ? 'فتح القائمة' : 'Open admin navigation'}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <Link href="/" className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#081A33] text-sm font-bold text-white">K</span>
+              <span className="hidden text-base font-semibold tracking-tight text-slate-950 sm:inline">Keytopia</span>
+            </Link>
+            <span className="hidden h-5 w-px bg-slate-200 sm:block" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                {dir === 'rtl' ? activeNavItem.labelAr : activeNavItem.label}
+              </p>
+              <p className="hidden text-xs text-slate-500 sm:block">
+                {dir === 'rtl' ? 'مساحة تشغيل المتجر' : 'Store operations workspace'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="relative hidden md:block">
+              <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                aria-label={dir === 'rtl' ? 'البحث في المنتجات' : 'Search products'}
+                placeholder={dir === 'rtl' ? 'بحث في المنتجات...' : 'Search products...'}
+                value={globalSearch}
+                onChange={(event) => setGlobalSearch(event.target.value)}
+                onKeyDown={submitGlobalSearch}
+                className="h-9 w-48 rounded-lg border border-slate-200 bg-slate-50 ps-9 pe-3 text-sm outline-none transition focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10 lg:w-64"
+              />
+            </div>
+            <Link href="/" className="hidden rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 sm:inline-flex">
+              {dir === 'rtl' ? 'عرض المتجر' : 'View store'}
+            </Link>
+            <button
+              onClick={handleLogout}
+              data-testid="button-admin-logout"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">{t('logOut')}</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={handleLogout}
-          data-testid="button-admin-logout"
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          {t('logOut')}
-        </button>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-12">
-        {/* Tab bar */}
-        <div className="flex gap-2 mb-8 border-b border-black/[0.06] pb-0 overflow-x-auto">
-          {(['dashboard', 'visits', 'sales', 'orders', 'users', 'cashback', 'products', 'reviews', 'categories', 'promo', 'settings'] as Tab[]).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 text-sm font-semibold rounded-t-[10px] transition-all border-b-2 -mb-px whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-primary text-primary bg-white'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab === 'dashboard' ? (dir === 'rtl' ? 'نظرة عامة' : 'Overview') : tab === 'visits' ? (dir === 'rtl' ? 'الزيارات' : 'Visits') : tab === 'sales' ? (dir === 'rtl' ? 'المبيعات' : 'Sales') : tab === 'orders' ? (dir === 'rtl' ? 'الطلبات' : 'Orders') : tab === 'users' ? (dir === 'rtl' ? 'المستخدمون' : 'Users') : tab === 'cashback' ? <span className="inline-flex items-center gap-1.5"><Gift className="w-4 h-4" />{t('cashback')}</span> : tab === 'products' ? t('products') : tab === 'reviews' ? (dir === 'rtl' ? 'التقييمات' : 'Reviews') : tab === 'categories' ? t('categories') : tab === 'settings' ? t('settings') : t('promoCodes')}
-            </button>
-          ))}
-        </div>
+      <div className="flex min-h-0 flex-1">
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label={dir === 'rtl' ? 'إغلاق القائمة' : 'Close navigation'}
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/30 lg:hidden"
+          />
+        )}
+        <aside className={`fixed inset-y-0 start-0 z-50 mt-16 w-64 border-e border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:mt-0 lg:block lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full rtl:translate-x-full'}`}>
+          <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
+            <div className="mb-5 flex items-center justify-between px-3 lg:hidden">
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                {dir === 'rtl' ? 'التنقل' : 'Navigation'}
+              </span>
+              <button type="button" onClick={() => setSidebarOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+                {dir === 'rtl' ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {dir === 'rtl' ? 'مساحة العمل' : 'Workspace'}
+            </p>
+            <nav className="space-y-1" aria-label={dir === 'rtl' ? 'تنقل الإدارة' : 'Admin navigation'}>
+              {primaryNavigation.map((item) => {
+                const Icon = item.icon;
+                const selected = activeTab === item.tab;
+                return (
+                  <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => selectTab(item.tab)}
+                    className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      selected
+                        ? 'bg-blue-50 text-primary'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                    <span className="flex-1 text-start">{dir === 'rtl' ? item.labelAr : item.label}</span>
+                    {!item.available && <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{dir === 'rtl' ? 'قريباً' : 'Soon'}</span>}
+                  </button>
+                );
+              })}
+            </nav>
+            <p className="mt-7 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {dir === 'rtl' ? 'أدوات الإدارة' : 'Administration'}
+            </p>
+            <nav className="space-y-1" aria-label={dir === 'rtl' ? 'أدوات الإدارة' : 'Administration tools'}>
+              {supportNavigation.map((item) => {
+                const Icon = item.icon;
+                const selected = activeTab === item.tab;
+                return (
+                  <button
+                    key={item.tab}
+                    type="button"
+                    onClick={() => selectTab(item.tab)}
+                    className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                      selected ? 'bg-blue-50 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${selected ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                    <span className="flex-1 text-start">{dir === 'rtl' ? item.labelAr : item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="mt-auto pt-8">
+              <div className="rounded-xl bg-[#081A33] p-4 text-white">
+                <p className="text-xs font-semibold text-cyan-200">{dir === 'rtl' ? 'Keytopia Admin' : 'Keytopia Admin'}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-300">
+                  {dir === 'rtl' ? 'بيانات حقيقية فقط، وقرارات أوضح.' : 'Real data only. Clearer decisions.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
 
-        {/* ── Products tab ── */}
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-[1440px]">
+            <div className="mb-6 flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                  {dir === 'rtl' ? 'لوحة الإدارة' : 'Admin workspace'}
+                </p>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+                  {dir === 'rtl' ? activeNavItem.labelAr : activeNavItem.label}
+                </h1>
+              </div>
+              {activeTab === 'dashboard' && (
+                <div className="text-xs font-medium text-slate-500">
+                  {dir === 'rtl' ? 'ملخص الأداء من البيانات الحالية' : 'Current-data performance summary'}
+                </div>
+              )}
+            </div>
+
         {activeTab === 'dashboard' && <AdminDashboard />}
 
         {activeTab === 'visits' && <AdminAnalytics kind="visits" />}
@@ -269,6 +479,14 @@ export default function Admin() {
         {activeTab === 'reviews' && <AdminReviews />}
 
         {activeTab === 'settings' && <AdminSettings />}
+
+        {activeTab === 'referrals' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'referrals')!} dir={dir} />}
+
+        {activeTab === 'coupons' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'coupons')!} dir={dir} />}
+
+        {activeTab === 'abandoned' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'abandoned')!} dir={dir} />}
+
+        {activeTab === 'reports' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'reports')!} dir={dir} />}
 
         {activeTab === 'products' && (
           <>
@@ -595,7 +813,9 @@ export default function Admin() {
             </div>
           </>
         )}
-      </main>
+          </div>
+        </main>
+      </div>
 
       <AdminProductModal
         isOpen={isModalOpen}
