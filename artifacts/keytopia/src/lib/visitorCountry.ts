@@ -1,4 +1,4 @@
-const cachedCountryKey = 'keytopia_visitor_country_v2';
+const cachedCountryKey = 'keytopia_visitor_country_v3';
 const timezoneCountryHints: Record<string, string> = {
   'Africa/Cairo': 'EG',
   'Africa/Casablanca': 'MA',
@@ -31,7 +31,10 @@ export function getVisitorCountryCode(): Promise<string | null> {
     .map(validCountryCode)
     .find((countryCode): countryCode is string => Boolean(countryCode));
   const timezoneCountry = timezoneCountryHints[Intl.DateTimeFormat().resolvedOptions().timeZone];
-  const countryCode = localeCountry ?? timezoneCountry ?? null;
+  // Time zones are a stronger local signal than browser language. For example,
+  // many visitors in Egypt use an English browser with an en-US locale while
+  // their device time zone remains Africa/Cairo.
+  const countryCode = timezoneCountry ?? localeCountry ?? null;
   if (countryCode) localStorage.setItem(cachedCountryKey, countryCode);
   return Promise.resolve(countryCode);
 }
