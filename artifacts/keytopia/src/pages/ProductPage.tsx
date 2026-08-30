@@ -33,7 +33,7 @@ export default function ProductPage() {
   const isLegacyUrl = /^\d+$/.test(slug);
   const { t, dir, lang } = useLang();
   const { addItem } = useCart();
-  const { currency, setCurrency } = useCurrency();
+  const { currency, setDetectedCurrency } = useCurrency();
   const [location] = useLocation();
   const legacyQuery = useGetProduct(legacyId, {
     query: { enabled: isLegacyUrl, queryKey: getGetProductQueryKey(legacyId) },
@@ -89,7 +89,7 @@ export default function ProductPage() {
       recordVisit.mutate({
         data: { path: location, productId: product.id, visitorId, countryCode },
       }, {
-        onSuccess: (result) => setCurrency(result.currency),
+        onSuccess: (result) => setDetectedCurrency(result.currency),
       });
     });
     return () => {

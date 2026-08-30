@@ -93,7 +93,7 @@ const clerkAppearance = {
 
 function VisitTracker() {
   const [location] = useLocation();
-  const { setCurrency } = useCurrency();
+  const { setDetectedCurrency } = useCurrency();
   const recordVisit = useRecordVisit();
 
   useEffect(() => {
@@ -109,7 +109,7 @@ function VisitTracker() {
       recordVisit.mutate({
         data: { path: location, productId: null, visitorId, countryCode },
       }, {
-        onSuccess: (result) => setCurrency(result.currency),
+        onSuccess: (result) => setDetectedCurrency(result.currency),
       });
     });
     return () => {

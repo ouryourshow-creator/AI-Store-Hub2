@@ -19,6 +19,8 @@ export const translations = {
     verifiedPartners: 'شركاء موثقون',
     support247: 'دعم على مدار الساعة',
     securePayment: 'دفع آمن',
+    switchToEgp: 'التبديل إلى الجنيه المصري',
+    switchToUsd: 'التبديل إلى الدولار الأمريكي',
 
     // Search
     searchPlaceholder: 'ابحث عن ChatGPT، Midjourney، Notion...',
@@ -224,6 +226,8 @@ export const translations = {
     verifiedPartners: 'Verified Partners',
     support247: '24/7 Support',
     securePayment: 'Secure Payment',
+    switchToEgp: 'Switch to Egyptian pounds',
+    switchToUsd: 'Switch to US dollars',
 
     // Search
     searchPlaceholder: 'Search for ChatGPT, Midjourney, Notion...',

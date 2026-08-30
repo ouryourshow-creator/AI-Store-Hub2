@@ -3,6 +3,7 @@ import { ShoppingBag, LogIn, User } from 'lucide-react';
 import { useUser } from '@clerk/react';
 import { useCart } from '../contexts/CartContext';
 import { useLang } from '../contexts/LanguageContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { useState } from 'react';
 import CartDrawer from './CartDrawer';
 
@@ -12,6 +13,7 @@ const logoImg = `${import.meta.env.BASE_URL}logo.png`;
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { cartCount } = useCart();
   const { t, toggleLang, dir } = useLang();
+  const { currency, setCurrency } = useCurrency();
   const { isLoaded, isSignedIn } = useUser();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const navigation = dir === 'rtl'
@@ -52,6 +54,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               className="h-9 px-4 rounded-full border border-black/[0.08] bg-muted hover:bg-muted/80 text-sm font-semibold text-foreground transition-all"
             >
               {t('toggleLang')}
+            </button>
+
+            {/* Currency Toggle */}
+            <button
+              onClick={() => setCurrency(currency === 'EGP' ? 'USD' : 'EGP')}
+              aria-label={currency === 'EGP' ? t('switchToUsd') : t('switchToEgp')}
+              title={currency === 'EGP' ? t('switchToUsd') : t('switchToEgp')}
+              className="h-9 min-w-[3.75rem] px-3 rounded-full border border-black/[0.08] bg-muted hover:bg-muted/80 text-sm font-semibold text-foreground transition-all"
+            >
+              {currency}
             </button>
 
             {/* Cart */}

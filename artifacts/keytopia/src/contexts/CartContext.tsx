@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { Product } from '@workspace/api-client-react';
 import { listProducts } from '@workspace/api-client-react';
+import { useCurrency } from './CurrencyContext';
 
 export type CartItem = Product & {
   quantity: number;
@@ -51,7 +52,42 @@ function resolveCurrentPrice(liveProduct: Product, selectedDuration: string, cur
   return liveProduct.salePrice != null ? liveProduct.salePrice : liveProduct.price;
 }
 
+function resolveCurrentSelection(
+  liveProduct: Product,
+  selectedDuration: string,
+  requestedCurrency: 'EGP' | 'USD',
+): { price: number; currency: 'EGP' | 'USD' } {
+  if (liveProduct.pricingOptions && liveProduct.pricingOptions.length > 0) {
+    const match = liveProduct.pricingOptions.find(opt => opt.duration === selectedDuration);
+    if (match && requestedCurrency === 'USD' && (match.salePriceUsd ?? match.priceUsd) != null) {
+      return {
+        price: match.salePriceUsd ?? match.priceUsd!,
+        currency: 'USD',
+      };
+    }
+    if (match) {
+      return {
+        price: match.salePrice != null ? match.salePrice : match.price,
+        currency: 'EGP',
+      };
+    }
+  }
+
+  if (requestedCurrency === 'USD' && (liveProduct.salePriceUsd ?? liveProduct.priceUsd) != null) {
+    return {
+      price: liveProduct.salePriceUsd ?? liveProduct.priceUsd!,
+      currency: 'USD',
+    };
+  }
+
+  return {
+    price: liveProduct.salePrice != null ? liveProduct.salePrice : liveProduct.price,
+    currency: 'EGP',
+  };
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { currency } = useCurrency();
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('keytopia_cart');
@@ -65,6 +101,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [priceChangedCount, setPriceChangedCount] = useState(0);
   const [isRevalidating, setIsRevalidating] = useState(false);
+  const previousCurrencyRef = useRef<'EGP' | 'USD' | null>(null);
 
   // Mirror items into a ref so revalidateCart can check emptiness without
   // capturing state in a closure (avoids the pre-await snapshot problem).
@@ -80,6 +117,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('keytopia_cart', JSON.stringify(items));
   }, [items]);
+
+  // Keep an existing cart aligned with the currency selected in the header.
+  useEffect(() => {
+    if (previousCurrencyRef.current === currency) return;
+    previousCurrencyRef.current = currency;
+    setItems(current => current.map(item => {
+      const selection = resolveCurrentSelection(item, item.selectedDuration, currency);
+      return {
+        ...item,
+        selectedPrice: selection.price,
+        selectedCurrency: selection.currency,
+      };
+    }));
+  }, [currency]);
 
   /**
    * Fetch live product data and silently patch any stale selectedPrice values.

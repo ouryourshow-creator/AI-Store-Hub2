@@ -5,6 +5,7 @@ import ProductCard from '../components/ProductCard';
 import { Search, CheckCircle2, Zap, ShieldCheck, Clock, Shield, Star, Facebook, TrendingUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLang } from '../contexts/LanguageContext';
+import { useCurrency } from '../contexts/CurrencyContext';
 import { Link } from 'wouter';
 import {
   formatProductTag,
@@ -73,6 +74,7 @@ const MARQUEE_GAP = 16;
 const MARQUEE_SPEED_PX_PER_SECOND = 32;
 
 function ProductMarquee({ products, lang }: { products: Product[]; lang: string }) {
+  const { currency } = useCurrency();
   const viewportRef = useRef<HTMLDivElement>(null);
   const sequenceRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -157,12 +159,23 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
       aria-hidden={sequenceIndex === 1 ? undefined : true}
     >
       {sequenceProducts.map((product, index) => {
-        const displayPrice = product.pricingOptions?.length
-          ? Math.min(...product.pricingOptions.map((option) => option.salePrice ?? option.price))
-          : product.salePrice ?? product.price;
-        const duration = product.pricingOptions?.length
-          ? [...product.pricingOptions].sort((a, b) => (a.salePrice ?? a.price) - (b.salePrice ?? b.price))[0].duration
-          : product.duration;
+        const priceForOption = (option: NonNullable<Product['pricingOptions']>[number]) => {
+          const usd = option.salePriceUsd ?? option.priceUsd;
+          return currency === 'USD' && usd != null
+            ? { amount: usd, code: 'USD' }
+            : { amount: option.salePrice ?? option.price, code: 'EGP' };
+        };
+        const priceForProduct = () => {
+          const usd = product.salePriceUsd ?? product.priceUsd;
+          return currency === 'USD' && usd != null
+            ? { amount: usd, code: 'USD' }
+            : { amount: product.salePrice ?? product.price, code: 'EGP' };
+        };
+        const cheapestOption = product.pricingOptions?.length
+          ? [...product.pricingOptions].sort((a, b) => priceForOption(a).amount - priceForOption(b).amount)[0]
+          : null;
+        const displayPrice = cheapestOption ? priceForOption(cheapestOption) : priceForProduct();
+        const duration = cheapestOption?.duration ?? product.duration;
         return (
           <Link
             key={`${sequenceIndex}-${product.id}-${index}`}
@@ -193,7 +206,7 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
             </div>
             <div className="p-3" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
               <p className="font-display font-semibold text-sm text-foreground truncate mb-1">{product.name}</p>
-              <p className="text-primary font-bold text-sm">EGP {displayPrice}</p>
+              <p className="text-primary font-bold text-sm">{displayPrice.code} {displayPrice.amount}</p>
               {typeof product.soldCount === 'number' && product.soldCount > 0 && (
                 <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200">
                   <TrendingUp className="w-2.5 h-2.5" />
