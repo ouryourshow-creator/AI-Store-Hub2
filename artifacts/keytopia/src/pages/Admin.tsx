@@ -490,8 +490,6 @@ export default function Admin() {
 
         {activeTab === 'reports' && <AdminReports />}
 
-        {activeTab === 'reports' && <AdminModulePlaceholder item={primaryNavigation.find((item) => item.tab === 'reports')!} dir={dir} />}
-
         {activeTab === 'products' && (
           <>
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
