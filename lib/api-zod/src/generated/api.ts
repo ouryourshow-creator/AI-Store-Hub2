@@ -846,155 +846,9 @@ export const GetMyReferralResponse = zod.object({
 
 
 /**
- * @summary Save an anonymous or signed-in cart snapshot
- */
-export const saveCartAbandonmentBodySubtotalMin = 0;
-
-
-
-
-
-export const SaveCartAbandonmentBody = zod.object({
-  "cartId": zod.string(),
-  "currency": zod.enum(['EGP', 'USD']),
-  "subtotal": zod.number().min(saveCartAbandonmentBodySubtotalMin),
-  "itemCount": zod.number().min(1),
-  "items": zod.array(zod.object({
-  "productId": zod.number(),
-  "productName": zod.string(),
-  "duration": zod.string(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number()
-})).min(1)
-})
-
-export const SaveCartAbandonmentResponse = zod.object({
-  "id": zod.number(),
-  "cartId": zod.string(),
-  "customerId": zod.string().nullable(),
-  "customerName": zod.string().nullable(),
-  "customerEmail": zod.string().nullable(),
-  "customerPhone": zod.string().nullable(),
-  "currency": zod.enum(['EGP', 'USD']),
-  "subtotal": zod.number(),
-  "itemCount": zod.number(),
-  "items": zod.array(zod.object({
-  "productId": zod.number(),
-  "productName": zod.string(),
-  "duration": zod.string(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number()
-})),
-  "status": zod.enum(['open', 'recovered', 'expired']),
-  "lastSeenAt": zod.string(),
-  "createdAt": zod.string(),
-  "recoveredAt": zod.string().nullable()
-})
-
-
-/**
- * @summary Mark a cart as recovered after order creation
- */
-export const RecoverCartAbandonmentParams = zod.object({
-  "cartId": zod.coerce.string()
-})
-
-export const RecoverCartAbandonmentResponse = zod.object({
-  "ok": zod.boolean()
-})
-
-
-/**
- * @summary List referral performance and rewards
- */
-export const ListAdminReferralsResponseItem = zod.object({
-  "referralCode": zod.string(),
-  "referrerCustomerId": zod.string(),
-  "referrerName": zod.string(),
-  "referrerEmail": zod.string(),
-  "referredCustomers": zod.number(),
-  "successfulOrders": zod.number(),
-  "pendingRewardEgp": zod.number(),
-  "availableRewardEgp": zod.number(),
-  "lastActivityAt": zod.string().nullable()
-})
-export const ListAdminReferralsResponse = zod.array(ListAdminReferralsResponseItem)
-
-
-/**
- * @summary Export orders as a CSV file
- */
-export const exportAdminOrdersCsvQueryStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const exportAdminOrdersCsvQueryEndDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-
-
-export const ExportAdminOrdersCsvQueryParams = zod.object({
-  "startDate": zod.coerce.string().regex(exportAdminOrdersCsvQueryStartDateRegExp),
-  "endDate": zod.coerce.string().regex(exportAdminOrdersCsvQueryEndDateRegExp)
-})
-
-export const ExportAdminOrdersCsvResponse = zod.unknown()
-
-
-/**
- * @summary Export a daily completed-sales CSV file
- */
-export const exportAdminSalesCsvQueryStartDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const exportAdminSalesCsvQueryEndDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-
-
-export const ExportAdminSalesCsvQueryParams = zod.object({
-  "startDate": zod.coerce.string().regex(exportAdminSalesCsvQueryStartDateRegExp),
-  "endDate": zod.coerce.string().regex(exportAdminSalesCsvQueryEndDateRegExp)
-})
-
-export const ExportAdminSalesCsvResponse = zod.unknown()
-
-
-/**
- * @summary List carts inactive for at least one hour
- */
-export const ListAdminAbandonedCartsResponseItem = zod.object({
-  "id": zod.number(),
-  "cartId": zod.string(),
-  "customerId": zod.string().nullable(),
-  "customerName": zod.string().nullable(),
-  "customerEmail": zod.string().nullable(),
-  "customerPhone": zod.string().nullable(),
-  "currency": zod.enum(['EGP', 'USD']),
-  "subtotal": zod.number(),
-  "itemCount": zod.number(),
-  "items": zod.array(zod.object({
-  "productId": zod.number(),
-  "productName": zod.string(),
-  "duration": zod.string(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number()
-})),
-  "status": zod.enum(['open', 'recovered', 'expired']),
-  "lastSeenAt": zod.string(),
-  "createdAt": zod.string(),
-  "recoveredAt": zod.string().nullable()
-})
-export const ListAdminAbandonedCartsResponse = zod.array(ListAdminAbandonedCartsResponseItem)
-
-
-/**
  * @summary List customers and cashback balances
  */
-export const ListAdminUsersResponseItem = zod.object({
-  "customerId": zod.string(),
-  "name": zod.string(),
-  "email": zod.string(),
-  "referralCode": zod.string().nullable(),
-  "orderCount": zod.number(),
-  "balances": zod.array(zod.object({
-  "currency": zod.enum(['EGP', 'USD']),
-  "pending": zod.number(),
-  "available": zod.number()
-}))
-})
-export const ListAdminUsersResponse = zod.array(ListAdminUsersResponseItem)
+export const ListAdminUsersResponse = zod.unknown()
 
 
 /**
@@ -1078,54 +932,6 @@ export const ListAdminOrdersResponse = zod.array(ListAdminOrdersResponseItem)
 
 
 /**
- * @summary Get a paginated admin order list
- */
-export const getAdminOrdersPageQueryPageDefault = 1;
-
-export const getAdminOrdersPageQueryPageSizeDefault = 25;
-
-export const GetAdminOrdersPageQueryParams = zod.object({
-  "search": zod.coerce.string().optional(),
-  "status": zod.coerce.string().optional(),
-  "page": zod.coerce.number().int().min(1).default(getAdminOrdersPageQueryPageDefault),
-  "pageSize": zod.union([zod.literal(10),zod.literal(25),zod.literal(50),zod.literal(100)]).default(getAdminOrdersPageQueryPageSizeDefault)
-})
-
-export const GetAdminOrdersPageResponse = zod.object({
-  "items": zod.array(zod.object({
-  "id": zod.number(),
-  "orderNumber": zod.union([zod.string(),zod.number()]),
-  "customerName": zod.string(),
-  "customerEmail": zod.string(),
-  "customerPhone": zod.string(),
-  "currency": zod.string(),
-  "subtotal": zod.number(),
-  "discount": zod.number(),
-  "total": zod.number(),
-  "promoCode": zod.string().nullish(),
-  "paymentMethod": zod.string().nullish(),
-  "status": zod.string(),
-  "items": zod.array(zod.object({
-  "id": zod.number(),
-  "productId": zod.number(),
-  "productName": zod.string(),
-  "coverImageUrl": zod.string().nullish(),
-  "duration": zod.string(),
-  "unitPrice": zod.number(),
-  "quantity": zod.number(),
-  "lineTotal": zod.number()
-})),
-  "createdAt": zod.string(),
-  "updatedAt": zod.string()
-})),
-  "page": zod.number(),
-  "pageSize": zod.number(),
-  "total": zod.number(),
-  "totalPages": zod.number()
-})
-
-
-/**
  * @summary Update an order status
  */
 export const UpdateOrderStatusParams = zod.object({
@@ -1165,16 +971,8 @@ export const UpdateOrderStatusResponse = zod.object({
 
 
 /**
- * @summary Get date-filtered store sales and visitor analytics
+ * @summary Get store sales and visitor analytics
  */
-export const getAdminDashboardQueryPresetDefault = `last_month`;
-
-export const GetAdminDashboardQueryParams = zod.object({
-  "preset": zod.enum(['today', 'yesterday', 'last_week', 'last_2_weeks', 'last_month', 'last_3_months', 'last_6_months', 'year', 'custom']).default(getAdminDashboardQueryPresetDefault),
-  "startDate": zod.coerce.string().optional(),
-  "endDate": zod.coerce.string().optional()
-})
-
 export const GetAdminDashboardResponse = zod.object({
   "totalSales": zod.number(),
   "totalSalesUsd": zod.number(),

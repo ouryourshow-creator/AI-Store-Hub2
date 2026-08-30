@@ -1,31 +1,18 @@
-import { useState, useEffect, Fragment } from 'react';
-import {
-  useGetAdminOrdersPage,
-  getGetAdminOrdersPageQueryKey,
-  useUpdateOrderStatus,
-} from '@workspace/api-client-react';
+import { useState, Fragment } from 'react';
+import { useListAdminOrders, getListAdminOrdersQueryKey, useUpdateOrderStatus } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, Package, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Package, Clock, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useLang } from '../contexts/LanguageContext';
 
-const ORDER_STATUSES = ['awaiting_payment', 'payment_proof_received', 'confirmed', 'fulfilled', 'cancelled'] as const;
-const STATUS_FILTERS = [
-  { value: '', en: 'All statuses', ar: 'جميع الحالات' },
-  { value: 'pending_payment', en: 'Pending payment', ar: 'بانتظار الدفع' },
-  { value: 'paid', en: 'Paid', ar: 'مدفوع' },
-  { value: 'cancelled', en: 'Cancelled', ar: 'ملغي' },
-] as const;
+const STATUSES = ['awaiting_payment', 'payment_proof_received', 'confirmed', 'fulfilled', 'cancelled'] as const;
 
 export default function AdminOrders() {
   const { dir } = useLang();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<10 | 25 | 50 | 100>(25);
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
   const toggleOrder = (id: number) => setExpandedOrders((prev) => {
     const next = new Set(prev);
@@ -33,42 +20,34 @@ export default function AdminOrders() {
     return next;
   });
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setPage(1);
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [search]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [statusFilter, pageSize]);
-
-  const orderParams = {
-    search: debouncedSearch || undefined,
-    status: statusFilter || undefined,
-    page,
-    pageSize,
-  } as const;
-
-  const { data: ordersPage, isLoading, isError } = useGetAdminOrdersPage(orderParams, {
+  const { data: orders, isLoading } = useListAdminOrders({}, {
     query: {
-      queryKey: getGetAdminOrdersPageQueryKey(orderParams),
+      queryKey: getListAdminOrdersQueryKey({}),
     }
   });
-  const orders = ordersPage?.items ?? [];
 
   const updateStatus = useUpdateOrderStatus({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetAdminOrdersPageQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListAdminOrdersQueryKey() });
         toast.success(dir === 'rtl' ? 'تم تحديث حالة الطلب' : 'Order status updated');
       },
       onError: () => {
         toast.error(dir === 'rtl' ? 'فشل تحديث حالة الطلب' : 'Failed to update order status');
       }
     }
+  });
+
+  const filteredOrders = (orders || []).filter(order => {
+    const matchesSearch = search === '' ||
+      String(order.orderNumber).toLowerCase().includes(search.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerEmail.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerPhone.includes(search);
+
+    const matchesStatus = statusFilter === '' || order.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
   });
 
   const getStatusLabel = (status: string) => {
@@ -103,20 +82,13 @@ export default function AdminOrders() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full appearance-none bg-muted border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary outline-none font-semibold text-foreground cursor-pointer"
             >
-              {STATUS_FILTERS.map((filter) => (
-                <option key={filter.value} value={filter.value}>{dir === 'rtl' ? filter.ar : filter.en}</option>
+              <option value="">{dir === 'rtl' ? 'جميع الحالات' : 'All Statuses'}</option>
+              {STATUSES.map(s => (
+                <option key={s} value={s}>{dir === 'rtl' ? getStatusLabel(s).ar : getStatusLabel(s).en}</option>
               ))}
             </select>
             <ChevronDown className={`w-4 h-4 absolute top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground ${dir === 'rtl' ? 'left-4' : 'right-4'}`} />
           </div>
-        <div className="flex w-full items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500 md:w-auto md:border-t-0 md:pt-0">
-          <span>
-            {ordersPage
-              ? `${ordersPage.total.toLocaleString()} ${dir === 'rtl' ? 'طلب' : 'orders'}`
-              : (dir === 'rtl' ? 'جارٍ التحميل...' : 'Loading...')}
-          </span>
-          {isError && <span className="text-red-600">{dir === 'rtl' ? 'تعذر تحميل الطلبات' : 'Could not load orders'}</span>}
-        </div>
         </div>
       </div>
 
@@ -143,17 +115,7 @@ export default function AdminOrders() {
                     </div>
                   </td>
                 </tr>
-              ) : isError ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-16 text-center">
-                    <div className="flex flex-col items-center justify-center text-red-600">
-                      <Package className="mb-4 h-12 w-12 opacity-30" />
-                      <p className="mb-1 text-lg font-semibold">{dir === 'rtl' ? 'تعذر تحميل الطلبات' : 'Could not load orders'}</p>
-                      <p className="text-sm text-slate-500">{dir === 'rtl' ? 'تحقق من الاتصال وحاول مرة أخرى.' : 'Check the connection and try again.'}</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : orders.length === 0 ? (
+              ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
@@ -164,7 +126,7 @@ export default function AdminOrders() {
                   </td>
                 </tr>
               ) : (
-  orders.map(order => {
+  filteredOrders.map(order => {
                   const conf = getStatusLabel(order.status);
                   const expanded = expandedOrders.has(order.id);
                   return (
@@ -204,7 +166,7 @@ export default function AdminOrders() {
                               <ChevronDown className="w-3 h-3" />
                             </button>
                             <div className={`absolute top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-black/[0.05] p-2 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all z-10 ${dir === 'rtl' ? 'left-0' : 'right-0'}`}>
-                              {ORDER_STATUSES.map(s => {
+                              {STATUSES.map(s => {
                                 const sConf = getStatusLabel(s);
                                 return (
                                   <button
@@ -268,48 +230,6 @@ export default function AdminOrders() {
               )}
             </tbody>
           </table>
-        </div>
-        <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="text-xs text-slate-500">
-            {ordersPage && ordersPage.total > 0
-              ? (dir === 'rtl'
-                ? `عرض ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, ordersPage.total)} من ${ordersPage.total}`
-                : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, ordersPage.total)} of ${ordersPage.total}`)
-              : (dir === 'rtl' ? 'لا توجد نتائج' : 'No results')}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="me-2 flex items-center gap-2 text-xs text-slate-500">
-              <span>{dir === 'rtl' ? 'لكل صفحة' : 'Per page'}</span>
-              <select
-                value={pageSize}
-                onChange={(event) => setPageSize(Number(event.target.value) as 10 | 25 | 50 | 100)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none focus:border-primary"
-              >
-                {[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page <= 1 || isLoading}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {dir === 'rtl' ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-              {dir === 'rtl' ? 'السابق' : 'Previous'}
-            </button>
-            <span className="min-w-16 text-center text-xs font-semibold text-slate-600">
-              {page} / {ordersPage?.totalPages ?? 0}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(ordersPage?.totalPages ?? current, current + 1))}
-              disabled={!ordersPage || page >= ordersPage.totalPages || isLoading}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {dir === 'rtl' ? 'التالي' : 'Next'}
-              {dir === 'rtl' ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            </button>
-          </div>
         </div>
       </div>
     </div>

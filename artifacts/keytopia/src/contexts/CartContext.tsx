@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { Product } from '@workspace/api-client-react';
-import { listProducts, saveCartAbandonment, recoverCartAbandonment } from '@workspace/api-client-react';
+import { listProducts } from '@workspace/api-client-react';
 import { useCurrency } from './CurrencyContext';
 
 export type CartItem = Product & {
@@ -22,8 +22,6 @@ interface CartContextType {
   isRevalidating: boolean;
   priceChangedCount: number;
   clearPriceChangedCount: () => void;
-  cartId: string;
-  markCartRecovered: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -90,17 +88,6 @@ function resolveCurrentSelection(
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { currency } = useCurrency();
-  const [cartId] = useState(() => {
-    try {
-      const stored = localStorage.getItem('keytopia_cart_id');
-      if (stored && /^[a-zA-Z0-9_-]{12,100}$/.test(stored)) return stored;
-      const next = crypto.randomUUID();
-      localStorage.setItem('keytopia_cart_id', next);
-      return next;
-    } catch {
-      return `cart_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    }
-  });
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('keytopia_cart');
@@ -115,8 +102,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [priceChangedCount, setPriceChangedCount] = useState(0);
   const [isRevalidating, setIsRevalidating] = useState(false);
   const previousCurrencyRef = useRef<'EGP' | 'USD' | null>(null);
-  const cartTotal = items.reduce((sum, item) => sum + (item.selectedPrice * item.quantity), 0);
-  const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   // Mirror items into a ref so revalidateCart can check emptiness without
   // capturing state in a closure (avoids the pre-await snapshot problem).
@@ -132,29 +117,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('keytopia_cart', JSON.stringify(items));
   }, [items]);
-
-  // Keep a lightweight server-side snapshot so admins can follow up on carts
-  // that have been inactive for at least an hour. The debounce avoids a request
-  // for every quantity click while preserving the latest cart contents.
-  useEffect(() => {
-    if (items.length === 0) return;
-    const timer = window.setTimeout(() => {
-      void saveCartAbandonment({
-        cartId,
-        currency: items[0].selectedCurrency,
-        subtotal: Math.round(cartTotal * 100) / 100,
-        itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-        items: items.map((item) => ({
-          productId: item.id,
-          productName: item.name,
-          duration: item.selectedDuration,
-          quantity: item.quantity,
-          unitPrice: item.selectedPrice,
-        })),
-      }).catch(() => {});
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [cartId, cartTotal, items]);
 
   // Keep an existing cart aligned with the currency selected in the header.
   useEffect(() => {
@@ -289,13 +251,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => setItems([]);
 
-  const markCartRecovered = useCallback(async () => {
-    try {
-      await recoverCartAbandonment(cartId);
-    } catch {
-      // Order creation is authoritative; a failed cleanup must not block it.
-    }
-  }, [cartId]);
+  const cartTotal = items.reduce((sum, item) => sum + (item.selectedPrice * item.quantity), 0);
+  const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <CartContext.Provider
@@ -311,8 +268,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
         isRevalidating,
         priceChangedCount,
         clearPriceChangedCount,
-        cartId,
-        markCartRecovered,
       }}
     >
       {children}

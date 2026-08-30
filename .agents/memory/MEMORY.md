@@ -1,6 +1,5 @@
 - [Drizzle-kit push/publish bugs](drizzle-schema-gotchas.md) — raw `sql` column defaults wrapped in a cast (e.g. `nextval(...)::text`) can crash drizzle-kit's DDL diff generator; `push`/`push-force` need `drizzle.config.ts` present or they silently can't run.
 - [Orval codegen: inline request bodies collide](orval-inline-body-collision.md) — an inline (non-$ref) request body schema in openapi.yaml breaks `tsc --build` for lib/api-zod with an ambiguous export error.
-- [Orval integer response compatibility](orval-zod3-integer.md) — OpenAPI integer response fields can emit unsupported `zod.int()` calls under this workspace’s Zod 3 setup.
 - [External Clerk keys](external-clerk-key-wiring.md) — owner-managed Clerk keys must be passed directly; Replit host-derived keys can point auth at an invalid preview custom domain.
 - [Admin whitelist deployment](admin-whitelist-deployment.md) — workflow-only admin email exports affect preview, not published deployments; configure production separately.
 - [Neon environment split](neon-environment-split.md) — development and production can report `neondb` while using different Neon branches or endpoints.

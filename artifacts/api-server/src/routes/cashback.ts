@@ -11,8 +11,6 @@ import {
   ApproveCashbackParams,
   ApproveCashbackResponse,
   GetMyCashbackResponse,
-  ListAdminReferralsResponse,
-  ListAdminUsersResponse,
   ListPendingCashbackResponse,
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/requireAdmin";
@@ -186,7 +184,7 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
     const ledger = ledgerByCustomer.get(transaction.customerId) ?? [];
     ledger.push(transaction); ledgerByCustomer.set(transaction.customerId, ledger);
   }
-  res.json(ListAdminUsersResponse.parse(customerIds.map((customerId) => {
+  res.json(customerIds.map((customerId) => {
     const latestOrder = latestOrderByCustomer.get(customerId);
     const ledger = ledgerByCustomer.get(customerId) ?? [];
     return {
@@ -197,76 +195,7 @@ router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
       balances: buildBalances(ledger),
       orderCount: orderCountByCustomer.get(customerId) ?? 0,
     };
-  })));
-});
-
-router.get("/admin/referrals", requireAdmin, async (_req, res): Promise<void> => {
-  const [profiles, orders, referralTransactions] = await Promise.all([
-    db.select().from(customerProfilesTable),
-    db.select().from(ordersTable).where(sql`${ordersTable.referralCode} IS NOT NULL`).orderBy(desc(ordersTable.createdAt)),
-    db.select().from(cashbackTransactionsTable).where(eq(cashbackTransactionsTable.source, "referral")),
-  ]);
-  const profileByCode = new Map(profiles.map((profile) => [profile.referralCode, profile]));
-  const orderById = new Map(orders.map((order) => [order.id, order]));
-  const summary = new Map<string, {
-    referralCode: string;
-    referrerCustomerId: string;
-    referrerName: string;
-    referrerEmail: string;
-    referredCustomerIds: Set<string>;
-    successfulOrders: number;
-    pendingRewardEgp: number;
-    availableRewardEgp: number;
-    lastActivityAt: Date | null;
-  }>();
-
-  for (const order of orders) {
-    if (!order.referralCode) continue;
-    const profile = profileByCode.get(order.referralCode);
-    if (!profile) continue;
-    const current = summary.get(order.referralCode) ?? {
-      referralCode: order.referralCode,
-      referrerCustomerId: profile.customerId,
-      referrerName: profile.name ?? "Customer",
-      referrerEmail: profile.email ?? "",
-      referredCustomerIds: new Set<string>(),
-      successfulOrders: 0,
-      pendingRewardEgp: 0,
-      availableRewardEgp: 0,
-      lastActivityAt: null,
-    };
-    if (order.customerId !== profile.customerId) {
-      current.referredCustomerIds.add(order.customerId);
-      if (completedOrderStatuses.has(order.status)) current.successfulOrders += 1;
-    }
-    if (!current.lastActivityAt || order.createdAt > current.lastActivityAt) current.lastActivityAt = order.createdAt;
-    summary.set(order.referralCode, current);
-  }
-
-  for (const transaction of referralTransactions) {
-    if (transaction.currency !== "EGP" || transaction.type !== "credit" || !transaction.orderId) continue;
-    const order = orderById.get(transaction.orderId);
-    if (!order?.referralCode) continue;
-    const current = summary.get(order.referralCode);
-    if (!current) continue;
-    if (transaction.status === "pending") current.pendingRewardEgp += Number(transaction.amount);
-    if (transaction.status === "available") current.availableRewardEgp += Number(transaction.amount);
-  }
-
-  const referrals = Array.from(summary.values())
-    .sort((a, b) => (b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0))
-    .map((item) => ({
-      referralCode: item.referralCode,
-      referrerCustomerId: item.referrerCustomerId,
-      referrerName: item.referrerName,
-      referrerEmail: item.referrerEmail,
-      referredCustomers: item.referredCustomerIds.size,
-      successfulOrders: item.successfulOrders,
-      pendingRewardEgp: Math.round(item.pendingRewardEgp * 100) / 100,
-      availableRewardEgp: Math.round(item.availableRewardEgp * 100) / 100,
-      lastActivityAt: item.lastActivityAt?.toISOString() ?? null,
-    }));
-  res.json(ListAdminReferralsResponse.parse(referrals));
+  }));
 });
 
 router.post("/admin/users/:customerId/cashback", requireAdmin, async (req, res): Promise<void> => {

@@ -54,7 +54,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
-  const { items, cartTotal, clearCart, markCartRecovered } = useCart();
+  const { items, cartTotal, clearCart } = useCart();
   const { t, dir, lang } = useLang();
   const { isSignedIn } = useAuth();
   const queryClient = useQueryClient();
@@ -206,7 +206,6 @@ export default function CheckoutModal({ isOpen, onClose }: CheckoutModalProps) {
       if (whatsappWindow) whatsappWindow.location.replace(`${WA_LINK}?text=${encodeURIComponent(msg)}`);
       else window.location.assign(`${WA_LINK}?text=${encodeURIComponent(msg)}`);
       queryClient.invalidateQueries({ queryKey: getGetMyCashbackQueryKey() });
-      await markCartRecovered();
       clearCart();
       handleClose();
     } catch {

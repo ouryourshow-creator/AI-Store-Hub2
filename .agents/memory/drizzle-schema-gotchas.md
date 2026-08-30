@@ -81,24 +81,6 @@ verified is safe, don't force through it. Apply the one approved change
 directly (e.g. a scoped `ALTER TABLE ... DROP DEFAULT`) and surface the
 other drift separately for the user to decide on.
 
-## Legacy development database with an empty migration ledger
-
-This project's development database can contain the established application
-tables while `drizzle.__drizzle_migrations` is empty. In that state,
-`drizzle-kit migrate` attempts to replay the baseline migration and fails
-against the existing tables, while `push-force` may stop at the same unrelated
-interactive diff prompt.
-
-**Why this matters:** a migration command failing in this state does not mean
-the new additive table is invalid, and retrying the baseline migration can
-create unnecessary risk for existing data.
-
-**How to apply:** generate the migration from the Drizzle schema, review that
-it is narrowly additive, and apply only that SQL idempotently to the
-development target when the full push/migrate flow is blocked. Keep the
-generated migration committed so the normal post-merge/publish flow has the
-canonical schema history.
-
 ## New target with Replit-managed session table
 
 When initializing a fresh Neon target, `drizzle-kit push --force` can stop on a
