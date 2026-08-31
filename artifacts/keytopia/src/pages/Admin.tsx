@@ -8,7 +8,7 @@ import {
   useListCategories, useCreateCategory, useDeleteCategory, getListCategoriesQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, Plus, Pencil, Trash2, Search, Tag, X, Layers, Eye, EyeOff, BarChart3, FileSpreadsheet, ShoppingCart, UserRoundPlus } from 'lucide-react';
+import { ShieldAlert, Plus, Pencil, Trash2, Search, Tag, X, Layers, Eye, EyeOff } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { toast } from 'sonner';
 import { useLang } from '../contexts/LanguageContext';
@@ -20,6 +20,10 @@ import AdminCashback from '../components/AdminCashback';
 import AdminUsers from '../components/AdminUsers';
 import AdminReviews from '../components/AdminReviews';
 import AdminSettings from '../components/AdminSettings';
+import AdminReferrals from '../components/AdminReferrals';
+import AdminAbandonedCarts from '../components/AdminAbandonedCarts';
+import AdminUnifiedAnalytics from '../components/AdminUnifiedAnalytics';
+import AdminReports from '../components/AdminReports';
 import { AdminShell, adminSections, type AdminSection } from '../components/AdminShell';
 
 type Tab = AdminSection;
@@ -27,18 +31,6 @@ type Tab = AdminSection;
 function readSection(): Tab {
   const section = new URLSearchParams(window.location.search).get('section');
   return section && adminSections.has(section as Tab) ? section as Tab : 'dashboard';
-}
-
-function ComingSection({ kind, dir }: { kind: 'referrals' | 'abandoned' | 'analytics' | 'reports'; dir: 'rtl' | 'ltr' }) {
-  const content = {
-    referrals: { icon: UserRoundPlus, ar: ['الإحالات', 'بيانات الإحالات موجودة بالفعل ضمن ملفات العملاء ومكافآت الكاش باك. ستعرض هذه المساحة التحويلات والمكافآت دون إنشاء نظام إحالات مكرر.'], en: ['Referrals', 'Referral data already lives in customer profiles and cashback rewards. This workspace will surface conversions and rewards without creating a parallel referral system.'] },
-    abandoned: { icon: ShoppingCart, ar: ['السلات المتروكة', 'السلة الحالية محفوظة في المتصفح فقط، لذلك لن نعرض أرقاماً غير حقيقية. يتطلب هذا التقرير إضافة تتبع آمن لنشاط السلة والاسترداد.'], en: ['Abandoned carts', 'The current cart is browser-only, so no fabricated totals are shown. This report requires safe cart activity and recovery persistence.'] },
-    analytics: { icon: BarChart3, ar: ['التحليلات', 'استخدم صفحات المبيعات والزيارات للتحليلات المتاحة حالياً. ستجمع هذه المساحة المقاييس الموثوقة فقط بعد توحيد نطاق التاريخ.'], en: ['Analytics', 'Use Sales and Traffic for currently available analytics. This workspace will combine only reliable metrics after date ranges are unified.'] },
-    reports: { icon: FileSpreadsheet, ar: ['التقارير', 'سيتم إنشاء ملفات XLSX حقيقية من الخادم باحترام الفلاتر. لم يتم تفعيل تنزيل غير مكتمل أو ملف CSV بامتداد مضلل.'], en: ['Reports', 'Real XLSX files will be generated server-side with active filters. No incomplete download or misleading CSV-with-XLSX-extension has been enabled.'] },
-  }[kind];
-  const Icon = content.icon;
-  const [title, body] = dir === 'rtl' ? content.ar : content.en;
-  return <section className="min-h-[60vh] grid place-items-center"><div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-primary"><Icon className="w-6 h-6" /></div><h2 className="text-2xl font-bold">{title}</h2><p className="mx-auto mt-3 max-w-xl leading-7 text-slate-500">{body}</p><span className="mt-6 inline-flex rounded-full bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-700">{dir === 'rtl' ? 'جاهز للمرحلة التالية' : 'Ready for the next phase'}</span></div></section>;
 }
 
 export default function Admin() {
@@ -270,10 +262,10 @@ export default function Admin() {
 
         {activeTab === 'settings' && <AdminSettings />}
 
-        {activeTab === 'referrals' && <ComingSection kind="referrals" dir={dir} />}
-        {activeTab === 'abandoned' && <ComingSection kind="abandoned" dir={dir} />}
-        {activeTab === 'analytics' && <ComingSection kind="analytics" dir={dir} />}
-        {activeTab === 'reports' && <ComingSection kind="reports" dir={dir} />}
+        {activeTab === 'referrals' && <AdminReferrals />}
+        {activeTab === 'abandoned' && <AdminAbandonedCarts />}
+        {activeTab === 'analytics' && <AdminUnifiedAnalytics />}
+        {activeTab === 'reports' && <AdminReports />}
 
         {activeTab === 'products' && (
           <>

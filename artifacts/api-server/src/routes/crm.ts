@@ -34,15 +34,16 @@ function clampText(value: unknown, max: number): string {
 function mapCart(cart: typeof abandonedCartsTable.$inferSelect) {
   return {
     id: cart.id,
-    visitorId: cart.visitorId,
+    visitorId: cart.cartId,
     customerId: cart.customerId,
+    customerName: cart.customerName,
     customerEmail: cart.customerEmail,
+    customerPhone: cart.customerPhone,
     currency: cart.currency,
-    total: Number(cart.total),
+    total: Number(cart.subtotal),
     itemCount: cart.itemCount,
     items: cart.items,
     status: cart.status,
-    recoveredOrderId: cart.recoveredOrderId,
     lastSeenAt: cart.lastSeenAt.toISOString(),
     recoveredAt: cart.recoveredAt?.toISOString() ?? null,
     createdAt: cart.createdAt.toISOString(),
@@ -91,13 +92,12 @@ router.post("/cart/activity", async (req, res): Promise<void> => {
     await db.update(abandonedCartsTable)
       .set({
         status: "recovered",
-        recoveredOrderId: Number.isInteger(orderId) && orderId > 0 ? orderId : null,
         recoveredAt: new Date(),
         lastSeenAt: new Date(),
       })
       .where(and(
-        eq(abandonedCartsTable.cartKey, cartKey),
-        ...(customerId ? [eq(abandonedCartsTable.customerId, customerId)] : [eq(abandonedCartsTable.visitorId, visitorId)]),
+        eq(abandonedCartsTable.cartId, cartKey),
+        ...(customerId ? [eq(abandonedCartsTable.customerId, customerId)] : [eq(abandonedCartsTable.cartId, cartKey)]),
       ));
     res.json({ ok: true });
     return;
@@ -112,28 +112,29 @@ router.post("/cart/activity", async (req, res): Promise<void> => {
   const total = Math.round(items.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
   const customerEmail = clampText(req.body?.customerEmail, 320).toLowerCase() || null;
   await db.insert(abandonedCartsTable).values({
-    cartKey,
-    visitorId,
+    cartId: cartKey,
     customerId,
+    customerName: null,
     customerEmail,
+    customerPhone: null,
     currency,
-    total: String(total),
+    subtotal: String(total),
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-    items,
-    status: "active",
+    items: items.map(({ lineTotal: _lineTotal, ...item }) => item),
+    status: "open",
     lastSeenAt: new Date(),
   }).onConflictDoUpdate({
-    target: abandonedCartsTable.cartKey,
+    target: abandonedCartsTable.cartId,
     set: {
-      visitorId,
       customerId,
       customerEmail,
+      customerName: null,
+      customerPhone: null,
       currency,
-      total: String(total),
+      subtotal: String(total),
       itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-      items,
-      status: "active",
-      recoveredOrderId: null,
+      items: items.map(({ lineTotal: _lineTotal, ...item }) => item),
+      status: "open",
       recoveredAt: null,
       lastSeenAt: new Date(),
     },
@@ -147,15 +148,16 @@ router.get("/admin/abandoned-carts", requireAdmin, async (req, res): Promise<voi
   const cutoff = new Date(Date.now() - abandonedAfterMs);
   const conditions = [];
   if (status === "abandoned") {
-    conditions.push(eq(abandonedCartsTable.status, "active"), lt(abandonedCartsTable.lastSeenAt, cutoff));
-  } else if (status === "active" || status === "recovered") {
-    conditions.push(eq(abandonedCartsTable.status, status));
+    conditions.push(eq(abandonedCartsTable.status, "open"), lt(abandonedCartsTable.lastSeenAt, cutoff));
+  } else if (status === "active") {
+    conditions.push(eq(abandonedCartsTable.status, "open"));
+  } else if (status === "recovered") {
+    conditions.push(eq(abandonedCartsTable.status, "recovered"));
   }
   if (search) {
     conditions.push(or(
       ilike(abandonedCartsTable.customerEmail, `%${search}%`),
-      ilike(abandonedCartsTable.visitorId, `%${search}%`),
-      ilike(abandonedCartsTable.cartKey, `%${search}%`),
+      ilike(abandonedCartsTable.cartId, `%${search}%`),
     ));
   }
   const carts = await db.select().from(abandonedCartsTable)
@@ -164,9 +166,9 @@ router.get("/admin/abandoned-carts", requireAdmin, async (req, res): Promise<voi
     .limit(250);
   const allActive = await db.select({
     currency: abandonedCartsTable.currency,
-    total: abandonedCartsTable.total,
+    total: abandonedCartsTable.subtotal,
   }).from(abandonedCartsTable).where(and(
-    eq(abandonedCartsTable.status, "active"),
+    eq(abandonedCartsTable.status, "open"),
     lt(abandonedCartsTable.lastSeenAt, cutoff),
   ));
   const recoveredCount = await db.select({ count: sql<number>`count(*)` })
@@ -394,9 +396,9 @@ router.get("/admin/reports/:type", requireAdmin, async (req, res): Promise<void>
     const carts = await db.select().from(abandonedCartsTable).where(and(gte(abandonedCartsTable.lastSeenAt, start), lt(abandonedCartsTable.lastSeenAt, new Date(end.getTime() + 1)))).orderBy(desc(abandonedCartsTable.lastSeenAt));
     rows = carts.map((cart) => ({
       customerEmail: cart.customerEmail ?? "",
-      visitorId: cart.visitorId,
+      visitorId: cart.cartId,
       currency: cart.currency,
-      total: Number(cart.total),
+      total: Number(cart.subtotal),
       itemCount: cart.itemCount,
       status: cart.status,
       lastSeenAt: cart.lastSeenAt.toISOString(),

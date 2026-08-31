@@ -5,3 +5,4 @@
 - [Neon environment split](neon-environment-split.md) — development and production can report `neondb` while using different Neon branches or endpoints.
 - [Analytics country attribution](analytics-country-attribution.md) — preview proxies may hide visitor IP/country headers; client hints and same-visitor repair handle legacy `UNKNOWN` rows.
 - [Referral cashback reconciliation](referral-cashback-reconciliation.md) — completed referred orders need idempotent repair so missed cross-account credits can be recovered safely.
+- [Abandoned cart schema compatibility](abandoned-carts-schema-compat.md) — inspect canonical Neon before changing cart storage; deployed data may use a legacy table shape.
