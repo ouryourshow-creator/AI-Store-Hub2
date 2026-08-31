@@ -22,6 +22,7 @@ interface CartContextType {
   isRevalidating: boolean;
   priceChangedCount: number;
   clearPriceChangedCount: () => void;
+  markCartRecovered: (orderId: number) => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -86,8 +87,22 @@ function resolveCurrentSelection(
   };
 }
 
+function getPersistentId(key: string, prefix: string): string {
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    localStorage.setItem(key, created);
+    return created;
+  } catch {
+    return `${prefix}-${Date.now()}`;
+  }
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const { currency } = useCurrency();
+  const visitorIdRef = useRef(getPersistentId('keytopia_visitor_id', 'visitor'));
+  const cartKeyRef = useRef(getPersistentId('keytopia_cart_key', 'cart'));
   const [items, setItems] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('keytopia_cart');
@@ -116,7 +131,42 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem('keytopia_cart', JSON.stringify(items));
+    if (items.length === 0) return;
+    const timer = window.setTimeout(() => {
+      void fetch('/api/cart/activity', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartKey: cartKeyRef.current,
+          visitorId: visitorIdRef.current,
+          currency: items[0].selectedCurrency,
+          items: items.map((item) => ({
+            productId: item.id,
+            productName: item.name,
+            duration: item.selectedDuration,
+            quantity: item.quantity,
+            unitPrice: item.selectedPrice,
+          })),
+        }),
+      }).catch(() => undefined);
+    }, 700);
+    return () => window.clearTimeout(timer);
   }, [items]);
+
+  const markCartRecovered = useCallback(async (orderId: number) => {
+    await fetch('/api/cart/activity', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cartKey: cartKeyRef.current,
+        visitorId: visitorIdRef.current,
+        status: 'recovered',
+        orderId,
+      }),
+    }).then(() => undefined).catch(() => undefined);
+  }, []);
 
   // Keep an existing cart aligned with the currency selected in the header.
   useEffect(() => {
@@ -268,6 +318,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         isRevalidating,
         priceChangedCount,
         clearPriceChangedCount,
+         markCartRecovered,
       }}
     >
       {children}

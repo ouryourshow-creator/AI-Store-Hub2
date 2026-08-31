@@ -65,7 +65,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export default function Checkout() {
-  const { items, cartTotal, clearCart } = useCart();
+  const { items, cartTotal, clearCart, markCartRecovered } = useCart();
   const { t, dir } = useLang();
   const { isLoaded, isSignedIn } = useAuth();
   const queryClient = useQueryClient();
@@ -223,6 +223,7 @@ export default function Checkout() {
       if (proofWindow) proofWindow.location.replace(proofUrl);
       else window.location.assign(proofUrl);
       queryClient.invalidateQueries({ queryKey: getGetMyCashbackQueryKey() });
+      await markCartRecovered(order.id);
       clearCart();
       setLocation('/orders');
     } catch {
