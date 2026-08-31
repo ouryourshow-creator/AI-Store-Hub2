@@ -101,17 +101,17 @@ export default function Orders() {
 
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto px-6 py-12 md:py-20">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-20">
+        <div className="flex items-start justify-between gap-3 mb-6 md:mb-8">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground mb-2">
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-1 md:mb-2">
               {dir === 'rtl' ? 'طلباتي' : 'My Orders'}
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm md:text-base text-muted-foreground">
               {dir === 'rtl' ? 'تتبع وإدارة طلباتك السابقة.' : 'Track and manage your past orders.'}
             </p>
           </div>
-          <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors">
+          <Link href="/" className="flex min-h-11 shrink-0 items-center gap-2 text-sm font-semibold text-primary hover:text-primary/80 transition-colors">
             {dir === 'rtl' ? <ArrowRight className="w-4 h-4" /> : <ArrowLeft className="w-4 h-4" />}
             {dir === 'rtl' ? 'العودة للمتجر' : 'Back to Store'}
           </Link>
@@ -233,7 +233,7 @@ export default function Orders() {
                   type="button"
                   onClick={() => toggleOrder(order.id)}
                   aria-expanded={expanded}
-                  className="w-full p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 text-start hover:bg-muted/10 transition-colors"
+                className="w-full p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 text-start hover:bg-muted/10 transition-colors"
                 >
                   <div>
                     <div className="flex items-center gap-3 mb-1">

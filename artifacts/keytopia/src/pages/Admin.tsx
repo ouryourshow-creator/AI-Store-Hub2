@@ -8,7 +8,7 @@ import {
   useListCategories, useCreateCategory, useDeleteCategory, getListCategoriesQueryKey,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ShieldAlert, Plus, Pencil, Trash2, LogOut, Search, Tag, X, Layers, Eye, EyeOff, Gift } from 'lucide-react';
+import { ShieldAlert, Plus, Pencil, Trash2, Search, Tag, X, Layers, Eye, EyeOff, BarChart3, FileSpreadsheet, ShoppingCart, UserRoundPlus } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { toast } from 'sonner';
 import { useLang } from '../contexts/LanguageContext';
@@ -20,8 +20,26 @@ import AdminCashback from '../components/AdminCashback';
 import AdminUsers from '../components/AdminUsers';
 import AdminReviews from '../components/AdminReviews';
 import AdminSettings from '../components/AdminSettings';
+import { AdminShell, adminSections, type AdminSection } from '../components/AdminShell';
 
-type Tab = 'dashboard' | 'visits' | 'sales' | 'orders' | 'users' | 'cashback' | 'products' | 'reviews' | 'promo' | 'categories' | 'settings';
+type Tab = AdminSection;
+
+function readSection(): Tab {
+  const section = new URLSearchParams(window.location.search).get('section');
+  return section && adminSections.has(section as Tab) ? section as Tab : 'dashboard';
+}
+
+function ComingSection({ kind, dir }: { kind: 'referrals' | 'abandoned' | 'analytics' | 'reports'; dir: 'rtl' | 'ltr' }) {
+  const content = {
+    referrals: { icon: UserRoundPlus, ar: ['الإحالات', 'بيانات الإحالات موجودة بالفعل ضمن ملفات العملاء ومكافآت الكاش باك. ستعرض هذه المساحة التحويلات والمكافآت دون إنشاء نظام إحالات مكرر.'], en: ['Referrals', 'Referral data already lives in customer profiles and cashback rewards. This workspace will surface conversions and rewards without creating a parallel referral system.'] },
+    abandoned: { icon: ShoppingCart, ar: ['السلات المتروكة', 'السلة الحالية محفوظة في المتصفح فقط، لذلك لن نعرض أرقاماً غير حقيقية. يتطلب هذا التقرير إضافة تتبع آمن لنشاط السلة والاسترداد.'], en: ['Abandoned carts', 'The current cart is browser-only, so no fabricated totals are shown. This report requires safe cart activity and recovery persistence.'] },
+    analytics: { icon: BarChart3, ar: ['التحليلات', 'استخدم صفحات المبيعات والزيارات للتحليلات المتاحة حالياً. ستجمع هذه المساحة المقاييس الموثوقة فقط بعد توحيد نطاق التاريخ.'], en: ['Analytics', 'Use Sales and Traffic for currently available analytics. This workspace will combine only reliable metrics after date ranges are unified.'] },
+    reports: { icon: FileSpreadsheet, ar: ['التقارير', 'سيتم إنشاء ملفات XLSX حقيقية من الخادم باحترام الفلاتر. لم يتم تفعيل تنزيل غير مكتمل أو ملف CSV بامتداد مضلل.'], en: ['Reports', 'Real XLSX files will be generated server-side with active filters. No incomplete download or misleading CSV-with-XLSX-extension has been enabled.'] },
+  }[kind];
+  const Icon = content.icon;
+  const [title, body] = dir === 'rtl' ? content.ar : content.en;
+  return <section className="min-h-[60vh] grid place-items-center"><div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-primary"><Icon className="w-6 h-6" /></div><h2 className="text-2xl font-bold">{title}</h2><p className="mx-auto mt-3 max-w-xl leading-7 text-slate-500">{body}</p><span className="mt-6 inline-flex rounded-full bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-700">{dir === 'rtl' ? 'جاهز للمرحلة التالية' : 'Ready for the next phase'}</span></div></section>;
+}
 
 export default function Admin() {
   const { isLoaded, isSignedIn } = useUser();
@@ -29,7 +47,21 @@ export default function Admin() {
   const [, setLocation] = useLocation();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const { t, dir } = useLang();
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>(readSection);
+
+  const navigateAdmin = (section: Tab) => {
+    setActiveTab(section);
+    const url = new URL(window.location.href);
+    if (section === 'dashboard') url.searchParams.delete('section');
+    else url.searchParams.set('section', section);
+    window.history.pushState({}, '', `${url.pathname}${url.search}`);
+  };
+
+  useEffect(() => {
+    const onPopState = () => setActiveTab(readSection());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) setLocation('/sign-in');
@@ -219,39 +251,7 @@ export default function Admin() {
   const inputCls = "w-full bg-muted border border-transparent rounded-[10px] px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all";
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[#F7F9FC]" dir={dir}>
-      <header className="bg-white border-b border-black/[0.03] px-6 py-4 flex items-center justify-between sticky top-0 z-30">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="font-display font-bold text-xl text-secondary">Keytopia</Link>
-          <span className="px-2 py-1 bg-secondary/10 text-secondary text-[10px] font-bold uppercase tracking-wider rounded">Admin</span>
-        </div>
-        <button
-          onClick={handleLogout}
-          data-testid="button-admin-logout"
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          {t('logOut')}
-        </button>
-      </header>
-
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-12">
-        {/* Tab bar */}
-        <div className="flex gap-2 mb-8 border-b border-black/[0.06] pb-0 overflow-x-auto">
-          {(['dashboard', 'visits', 'sales', 'orders', 'users', 'cashback', 'products', 'reviews', 'categories', 'promo', 'settings'] as Tab[]).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 text-sm font-semibold rounded-t-[10px] transition-all border-b-2 -mb-px whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-primary text-primary bg-white'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab === 'dashboard' ? (dir === 'rtl' ? 'نظرة عامة' : 'Overview') : tab === 'visits' ? (dir === 'rtl' ? 'الزيارات' : 'Visits') : tab === 'sales' ? (dir === 'rtl' ? 'المبيعات' : 'Sales') : tab === 'orders' ? (dir === 'rtl' ? 'الطلبات' : 'Orders') : tab === 'users' ? (dir === 'rtl' ? 'المستخدمون' : 'Users') : tab === 'cashback' ? <span className="inline-flex items-center gap-1.5"><Gift className="w-4 h-4" />{t('cashback')}</span> : tab === 'products' ? t('products') : tab === 'reviews' ? (dir === 'rtl' ? 'التقييمات' : 'Reviews') : tab === 'categories' ? t('categories') : tab === 'settings' ? t('settings') : t('promoCodes')}
-            </button>
-          ))}
-        </div>
+    <AdminShell active={activeTab} onNavigate={navigateAdmin} onLogout={handleLogout} dir={dir}>
 
         {/* ── Products tab ── */}
         {activeTab === 'dashboard' && <AdminDashboard />}
@@ -269,6 +269,11 @@ export default function Admin() {
         {activeTab === 'reviews' && <AdminReviews />}
 
         {activeTab === 'settings' && <AdminSettings />}
+
+        {activeTab === 'referrals' && <ComingSection kind="referrals" dir={dir} />}
+        {activeTab === 'abandoned' && <ComingSection kind="abandoned" dir={dir} />}
+        {activeTab === 'analytics' && <ComingSection kind="analytics" dir={dir} />}
+        {activeTab === 'reports' && <ComingSection kind="reports" dir={dir} />}
 
         {activeTab === 'products' && (
           <>
@@ -595,14 +600,12 @@ export default function Admin() {
             </div>
           </>
         )}
-      </main>
-
       <AdminProductModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         product={editingProduct}
         onProductSaved={() => queryClient.invalidateQueries({ queryKey: getListAdminProductsQueryKey() })}
       />
-    </div>
+    </AdminShell>
   );
 }

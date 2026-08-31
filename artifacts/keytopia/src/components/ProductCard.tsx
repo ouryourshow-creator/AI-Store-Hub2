@@ -4,7 +4,7 @@ import { useLang } from '../contexts/LanguageContext';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
-import { TrendingUp } from 'lucide-react';
+import { Gift, TrendingUp } from 'lucide-react';
 import { useCurrency } from '../contexts/CurrencyContext';
 import {
   formatProductTag,
@@ -45,6 +45,10 @@ export default function ProductCard({ product }: { product: Product }) {
 
   // What to show as the price
   const display = cheapestOption ? priceForOption(cheapestOption) : priceForProduct();
+  const discountPercent = display.original != null && display.original > display.amount
+    ? Math.round(((display.original - display.amount) / display.original) * 100)
+    : null;
+  const cashback = Math.round(display.amount * 0.05 * 100) / 100;
 
   return (
     <motion.div
@@ -60,6 +64,8 @@ export default function ProductCard({ product }: { product: Product }) {
             <img
               src={product.coverImageUrl}
               alt={product.name}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
             />
           ) : (
@@ -83,7 +89,7 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
       </Link>
 
-      <div className="p-3 md:p-6 flex flex-col flex-1">
+      <div className="p-4 md:p-6 flex flex-col flex-1">
         <div className="mb-1 flex flex-wrap items-center gap-1">
           <span className="inline-flex items-center gap-1 px-1.5 md:px-2 py-0.5 rounded text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-[#1CC88A] bg-[#1CC88A]/10">
             <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-[#1CC88A] animate-pulse" />
@@ -100,7 +106,7 @@ export default function ProductCard({ product }: { product: Product }) {
         </div>
 
         <Link href={`/products/${product.slug}`}>
-          <h3 className="text-sm md:text-xl font-display font-semibold mt-1.5 md:mt-2 mb-0.5 md:mb-1 text-foreground hover:text-primary transition-colors line-clamp-2">{product.name}</h3>
+          <h3 className="text-base md:text-xl font-display font-bold mt-1.5 md:mt-2 mb-0.5 md:mb-1 text-foreground hover:text-primary transition-colors line-clamp-2">{product.name}</h3>
         </Link>
 
         {product.description && (
@@ -110,17 +116,23 @@ export default function ProductCard({ product }: { product: Product }) {
         <div className="mt-auto pt-2 md:pt-4 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="hidden md:block text-[10px] text-muted-foreground uppercase tracking-widest font-medium">{t('price')}</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-display font-bold text-sm md:text-xl text-foreground">
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+              <span className="font-display font-bold text-base md:text-xl text-foreground">
                 {hasMultipleOptions ? `${t('from')} ` : ''}{display.code} {display.amount}
               </span>
               {display.original != null && (
-                <span className="hidden md:inline text-sm text-muted-foreground line-through">
+                <span className="text-xs md:text-sm text-muted-foreground line-through">
                   {display.code} {display.original}
                 </span>
               )}
+              {discountPercent != null && <span className="rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-bold text-red-600">{discountPercent}% OFF</span>}
             </div>
           </div>
+        </div>
+
+        <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+          <Gift className="h-3.5 w-3.5" />
+          <span>{lang === 'ar' ? `هتكسب ${cashback} ${display.code === 'EGP' ? 'جنيه' : 'دولار'} كاش باك` : `Earn ${display.code} ${cashback} cashback`}</span>
         </div>
 
         <button
@@ -133,7 +145,7 @@ export default function ProductCard({ product }: { product: Product }) {
             });
           }}
           disabled={product.availability === 'out_of_stock' || product.availability === 'coming_soon'}
-          className="mt-3 md:mt-5 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2 md:py-3.5 px-4 rounded-full text-xs md:text-base transition-all active:scale-[0.98] shadow-sm hover:shadow active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-3 md:mt-5 min-h-11 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 rounded-xl md:rounded-full text-sm md:text-base transition-all active:scale-[0.98] shadow-sm hover:shadow active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {t('addToCart')}
         </button>

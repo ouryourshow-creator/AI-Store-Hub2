@@ -63,9 +63,10 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               exit={{ x: slideX }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className={`fixed inset-y-0 ${drawerSide} w-full max-w-md bg-card shadow-2xl z-50 flex flex-col border-black/[0.03]`}
+              style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
               dir={dir}
             >
-              <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.03]">
+              <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-5 border-b border-black/[0.03]">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-display font-bold">{t('yourCart')}</h2>
                   {isRevalidating && (
@@ -74,7 +75,8 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                  aria-label={dir === 'rtl' ? 'إغلاق السلة' : 'Close cart'}
+                  className="grid h-11 w-11 place-items-center rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -103,7 +105,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                 )}
               </AnimatePresence>
 
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 flex flex-col gap-4 md:gap-6">
                 {items.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                     <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -114,8 +116,8 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                   </div>
                 ) : (
                   items.map(item => (
-                    <div key={item.id} className="flex gap-4">
-                      <div className="w-20 h-20 rounded-[12px] overflow-hidden bg-muted flex-shrink-0">
+                    <div key={item.id} className="flex gap-3 rounded-xl border border-black/[0.05] bg-white p-3 md:border-0 md:p-0">
+                      <div className="w-18 h-18 md:w-20 md:h-20 rounded-[10px] md:rounded-[12px] overflow-hidden bg-muted flex-shrink-0">
                         {item.coverImageUrl ? (
                           <img src={item.coverImageUrl} alt={item.name} className="w-full h-full object-cover" />
                         ) : (
@@ -136,17 +138,19 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                         <div className="flex items-center justify-between mt-2">
                           <span className="font-display font-bold text-sm">{item.selectedCurrency ?? 'EGP'} {item.selectedPrice}</span>
 
-                          <div className="flex items-center gap-2 bg-muted rounded-full p-1">
+                          <div className="flex items-center gap-1 bg-muted rounded-xl p-0.5">
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-background text-foreground transition-colors"
+                              aria-label={item.quantity <= 1 ? (dir === 'rtl' ? 'حذف المنتج' : 'Remove item') : (dir === 'rtl' ? 'تقليل الكمية' : 'Decrease quantity')}
+                              className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-background text-foreground transition-colors"
                             >
                               {item.quantity <= 1 ? <Trash2 className="w-3 h-3 text-destructive" /> : <Minus className="w-3 h-3" />}
                             </button>
                             <span className="text-xs font-semibold w-3 text-center">{item.quantity}</span>
                             <button
                               onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-background text-foreground transition-colors"
+                              aria-label={dir === 'rtl' ? 'زيادة الكمية' : 'Increase quantity'}
+                              className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-background text-foreground transition-colors"
                             >
                               <Plus className="w-3 h-3" />
                             </button>
@@ -159,7 +163,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               </div>
 
               {items.length > 0 && (
-                <div className="p-6 border-t border-black/[0.03] bg-background">
+                <div className="p-4 md:p-6 border-t border-black/[0.03] bg-background">
                   <div className="flex justify-between mb-4 font-display">
                     <span className="text-muted-foreground">{t('total')}</span>
                     <span className="font-bold text-xl">{items[0]?.selectedCurrency ?? 'EGP'} {cartTotal}</span>
@@ -174,7 +178,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                       setLocation(isLoaded && !isSignedIn ? '/sign-in' : '/checkout');
                     }}
                     disabled={isRevalidating}
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-4 px-4 rounded-[20px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
+                    className="min-h-12 w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 rounded-xl md:rounded-[20px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     {isRevalidating ? (
                       <>
