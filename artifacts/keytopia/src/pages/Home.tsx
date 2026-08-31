@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, ty
 import { useListProducts, useListCategories, type Product } from '@workspace/api-client-react';
 import Layout from '../components/Layout';
 import ProductCard from '../components/ProductCard';
-import { Search, CheckCircle2, Zap, ShieldCheck, Clock, Shield, Star, Facebook, TrendingUp } from 'lucide-react';
+import { Search, CheckCircle2, Zap, ShieldCheck, Clock, Shield, Star, Facebook, TrendingUp, PackageCheck, LayoutGrid, WalletCards } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLang } from '../contexts/LanguageContext';
 import { useCurrency } from '../contexts/CurrencyContext';
@@ -393,16 +393,17 @@ export default function Home() {
       </div>
 
       {/* Store statistics */}
-      <section className="w-full bg-[#081A33] border-b border-white/5 py-5 md:py-14">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-3 gap-3 md:gap-8 text-center">
+      <section className="w-full bg-[#081A33] border-b border-white/5 py-4 md:py-14">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-3 text-center">
           {[
-            { value: totalSold.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'اشتراك تم تسليمه', en: 'Subscriptions delivered' },
-            { value: (products?.length ?? 0).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'منتج متاح', en: 'Available products' },
-            { value: managedReviews.length.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'تقييم منشور', en: 'Published reviews' },
+            { value: totalSold.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'اشتراك تم تسليمه', en: 'Subscriptions delivered', icon: PackageCheck },
+            { value: (products?.length ?? 0).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'منتج متاح', en: 'Available products', icon: LayoutGrid },
+            { value: lang === 'ar' ? '٥٪' : '5%', ar: 'كاش باك على كل طلب', en: 'Cashback on every order', icon: WalletCards },
           ].map((stat) => (
-            <div key={stat.en}>
-              <p className="font-display text-xl md:text-5xl font-bold text-cyan-400">{stat.value}</p>
-              <p className="mt-1 text-[11px] leading-4 md:mt-3 md:text-xl text-slate-300">{lang === 'ar' ? stat.ar : stat.en}</p>
+            <div key={stat.en} className="relative flex min-w-0 flex-col items-center justify-center px-1 first:border-s-0 md:px-8 [&+div]:border-s [&+div]:border-white/10">
+              <stat.icon aria-hidden="true" className="mb-1 h-4 w-4 text-cyan-300/90 md:mb-2 md:h-5 md:w-5" />
+              <p className="font-display text-2xl font-extrabold leading-none tracking-tight text-cyan-300 md:text-4xl">{stat.value}</p>
+              <p className="mt-1 text-[10px] font-semibold leading-4 text-white/90 md:mt-3 md:text-lg">{lang === 'ar' ? stat.ar : stat.en}</p>
             </div>
           ))}
         </div>
