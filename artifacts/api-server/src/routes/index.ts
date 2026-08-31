@@ -9,6 +9,7 @@ import ordersRouter from "./orders";
 import cashbackRouter from "./cashback";
 import reviewsRouter from "./reviews";
 import settingsRouter from "./settings";
+import crmRouter from "./crm";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(ordersRouter);
 router.use(cashbackRouter);
 router.use(reviewsRouter);
 router.use(settingsRouter);
+router.use(crmRouter);
 
 export default router;
