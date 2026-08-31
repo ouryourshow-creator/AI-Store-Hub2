@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useListProducts, useListCategories, type Product } from '@workspace/api-client-react';
 import Layout from '../components/Layout';
 import ProductCard from '../components/ProductCard';
@@ -181,7 +181,7 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
             key={`${sequenceIndex}-${product.id}-${index}`}
             href={`/products/${product.slug}`}
             tabIndex={sequenceIndex === 1 ? undefined : -1}
-            className="flex-shrink-0 w-[200px] bg-white rounded-[16px] border border-black/[0.05] shadow-sm overflow-hidden hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer"
+            className="flex-shrink-0 w-[72vw] max-w-[280px] sm:w-[200px] bg-white rounded-[16px] border border-black/[0.05] shadow-sm overflow-hidden hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary transition-all duration-200 cursor-pointer"
             style={{ textDecoration: 'none' }}
           >
             <div className="w-full h-[110px] bg-gradient-to-br from-secondary/20 to-primary/20 relative overflow-hidden">
@@ -253,6 +253,7 @@ function ProductMarquee({ products, lang }: { products: Product[]; lang: string 
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim().toLocaleLowerCase());
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { data: products, isLoading } = useListProducts();
   const { data: categories } = useListCategories();
@@ -269,7 +270,8 @@ export default function Home() {
   }, []);
 
   const filteredProducts = products?.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const searchable = [p.name, p.category, p.brand, p.description, ...(p.features ?? [])].filter(Boolean).join(' ').toLocaleLowerCase();
+    const matchesSearch = !deferredSearchQuery || searchable.includes(deferredSearchQuery);
     const matchesCategory = selectedCategory === null || p.category === selectedCategory;
     return matchesSearch && matchesCategory;
   }) || [];
@@ -338,19 +340,20 @@ export default function Home() {
                 animate={{ y: [0, -logo.dy, 0] }}
                 transition={{ duration: logo.dur, repeat: Infinity, ease: 'easeInOut', delay: i * 0.4 }}
                 style={baseStyle}
+                className="hidden md:block"
                 draggable={false}
               />
             );
           });
         })()}
 
-        <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32 flex flex-col items-center text-center">
+        <div className="relative max-w-7xl mx-auto px-4 py-10 md:px-6 md:py-32 flex flex-col items-center text-center">
           <motion.h1
             key={`hero-${lang}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className={`text-4xl md:text-6xl font-display font-bold text-white mb-6 max-w-3xl whitespace-pre-line ${lang === 'en' ? 'tracking-tight' : 'leading-relaxed'}`}
+            className={`text-[2rem] leading-[1.35] md:text-6xl font-display font-bold text-white mb-3 md:mb-6 max-w-3xl whitespace-pre-line ${lang === 'en' ? 'tracking-tight' : 'md:leading-relaxed'}`}
           >
             {t('heroTitle')}
           </motion.h1>
@@ -359,20 +362,29 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-white/80 text-lg md:text-xl max-w-2xl font-medium"
+            className="text-white/85 text-sm md:text-xl max-w-2xl font-medium"
           >
             {t('heroSubtitle')}
           </motion.p>
+          <div className="mt-6 flex w-full max-w-sm gap-2 md:max-w-none md:justify-center">
+            <a href="#products" className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl bg-white px-5 text-sm font-bold text-primary shadow-sm md:flex-none">{lang === 'ar' ? 'تصفح المنتجات' : 'Browse products'}</a>
+            <a href="#products" className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-white/35 px-5 text-sm font-bold text-white md:flex-none">{lang === 'ar' ? 'العروض الحالية' : 'Current offers'}</a>
+          </div>
+          <label className="relative mt-5 block w-full max-w-xl md:hidden">
+            <span className="sr-only">{lang === 'ar' ? 'البحث في المنتجات' : 'Search products'}</span>
+            <Search className="absolute start-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+            <input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder={lang === 'ar' ? 'ابحث عن Canva أو Perplexity أو Office...' : 'Search Canva, Perplexity, Office…'} className="h-12 w-full rounded-xl border-0 bg-white ps-12 pe-4 text-sm text-foreground shadow-lg outline-none focus:ring-2 focus:ring-cyan-300" />
+          </label>
         </div>
       </section>
 
       {/* Trust Badges */}
       <div className="bg-white border-b border-black/[0.03]">
-        <div className="max-w-7xl mx-auto px-6 py-8 overflow-x-auto no-scrollbar">
-          <div className="flex items-center justify-center min-w-max md:min-w-0 gap-8 md:gap-16">
-            {badges.map((badge, i) => (
-              <div key={i} className="flex items-center gap-2 text-secondary font-medium text-sm">
-                <badge.icon className="w-5 h-5 flex-shrink-0" />
+        <div className="max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-8">
+          <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:justify-center md:gap-16">
+            {badges.slice(0, 4).map((badge, i) => (
+              <div key={i} className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-slate-50 px-2 text-secondary font-semibold text-xs md:bg-transparent md:text-sm">
+                <badge.icon className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
                 <span>{badge.label}</span>
               </div>
             ))}
@@ -381,17 +393,16 @@ export default function Home() {
       </div>
 
       {/* Store statistics */}
-      <section className="w-full bg-[#081A33] border-b border-white/5 py-10 md:py-14">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
+      <section className="w-full bg-[#081A33] border-b border-white/5 py-5 md:py-14">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 grid grid-cols-3 gap-3 md:gap-8 text-center">
           {[
-            { value: '5k+', ar: 'عميل سعيد', en: 'Happy customers' },
-            { value: `${totalSold.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en')}+`, ar: 'عملية شراء ناجحة', en: 'Successful purchases' },
-            { value: '30+', ar: 'خدمة رقمية', en: 'Digital services' },
-            { value: '3+', ar: 'سنين خبرة', en: 'Years of experience' },
+            { value: totalSold.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'اشتراك تم تسليمه', en: 'Subscriptions delivered' },
+            { value: (products?.length ?? 0).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'منتج متاح', en: 'Available products' },
+            { value: managedReviews.length.toLocaleString(lang === 'ar' ? 'ar-EG' : 'en'), ar: 'تقييم منشور', en: 'Published reviews' },
           ].map((stat) => (
             <div key={stat.en}>
-              <p className="font-display text-4xl md:text-5xl font-bold text-cyan-400 drop-shadow-[0_0_18px_rgba(34,211,238,0.25)]">{stat.value}</p>
-              <p className="mt-3 text-base md:text-xl text-slate-300">{lang === 'ar' ? stat.ar : stat.en}</p>
+              <p className="font-display text-xl md:text-5xl font-bold text-cyan-400">{stat.value}</p>
+              <p className="mt-1 text-[11px] leading-4 md:mt-3 md:text-xl text-slate-300">{lang === 'ar' ? stat.ar : stat.en}</p>
             </div>
           ))}
         </div>
@@ -405,9 +416,9 @@ export default function Home() {
       )}
 
       {/* Main Content */}
-      <div id="products" className="max-w-7xl mx-auto px-6 py-16 w-full flex-1 scroll-mt-32">
+      <div id="products" className="max-w-7xl mx-auto px-4 py-8 md:px-6 md:py-16 w-full flex-1 scroll-mt-20 md:scroll-mt-32">
         {/* Search */}
-        <div className="flex justify-center mb-8">
+        <div className="hidden md:flex justify-center mb-8">
           <div className="relative w-full max-w-xl">
             <div className="absolute inset-y-0 start-0 ps-4 flex items-center pointer-events-none">
               <Search className="h-5 w-5 text-muted-foreground" />
@@ -424,10 +435,10 @@ export default function Home() {
 
         {/* Category filter pills */}
         {categories && categories.length > 0 && (
-          <div className="flex items-center gap-2 mb-10 overflow-x-auto no-scrollbar pb-1">
+          <div className="flex items-center gap-2 mb-6 md:mb-10 overflow-x-auto no-scrollbar pb-1 snap-x">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={selectedCategory === null ? pillActive : pillInactive}
+              className={`${selectedCategory === null ? pillActive : pillInactive} min-h-11 snap-start`}
             >
               {t('allCategories')}
             </button>
@@ -435,7 +446,7 @@ export default function Home() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(selectedCategory === cat.name ? null : cat.name)}
-                className={selectedCategory === cat.name ? pillActive : pillInactive}
+                className={`${selectedCategory === cat.name ? pillActive : pillInactive} min-h-11 snap-start`}
               >
                 {cat.name}
               </button>
@@ -445,7 +456,7 @@ export default function Home() {
 
         {/* Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
+          <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="bg-white rounded-[20px] h-[280px] md:h-[380px] animate-pulse border border-black/[0.03]">
                 <div className="h-[130px] md:h-[200px] bg-muted w-full rounded-t-[20px]" />
@@ -468,7 +479,7 @@ export default function Home() {
           <AnimatePresence mode="popLayout">
             <motion.div
               layout
-              className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6"
+              className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-6"
             >
               {filteredProducts.map((product) => (
                 <motion.div
@@ -488,7 +499,7 @@ export default function Home() {
       </div>
 
       {/* ── Reviews section ── */}
-      <section className="w-full bg-gradient-to-b from-[#F7F9FC] to-white py-20 border-t border-black/[0.04]">
+      <section className="w-full bg-gradient-to-b from-[#F7F9FC] to-white py-10 md:py-20 border-t border-black/[0.04]">
         <div className="max-w-7xl mx-auto px-6">
           {/* Header */}
           <div className="text-center mb-12">

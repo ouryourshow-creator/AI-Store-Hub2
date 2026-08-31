@@ -165,26 +165,26 @@ export default function ProductPage() {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto px-6 py-10 w-full">
+      <div className="max-w-5xl mx-auto px-4 py-5 pb-28 md:px-6 md:py-10 md:pb-10 w-full">
         {/* Back link */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8 group"
+          className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3 md:mb-8 group"
         >
           <BackArrow className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
           {t('backToStore')}
         </Link>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-10 items-start">
           {/* Left — image */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="rounded-[24px] overflow-hidden aspect-square bg-muted shadow-sm border border-black/[0.06]"
+            className="rounded-2xl md:rounded-[24px] overflow-hidden aspect-[16/10] md:aspect-square bg-muted shadow-sm border border-black/[0.06]"
           >
             {product.coverImageUrl ? (
-              <img src={product.coverImageUrl} alt={product.name} className="w-full h-full object-cover" />
+              <img src={product.coverImageUrl} alt={product.name} fetchPriority="high" decoding="async" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-secondary to-primary flex items-center justify-center">
                 <span className="text-white/20 font-display font-bold text-8xl">{product.name.charAt(0)}</span>
@@ -197,7 +197,7 @@ export default function ProductPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.08 }}
-            className="flex flex-col gap-5"
+            className="flex flex-col gap-4 md:gap-5"
           >
             {/* Badges row */}
             <div className="flex flex-wrap items-center gap-2">
@@ -236,7 +236,7 @@ export default function ProductPage() {
 
             {/* Name + brand */}
             <div>
-              <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground leading-snug">
+              <h1 className="text-2xl md:text-4xl font-display font-bold text-foreground leading-snug">
                 {product.name}
               </h1>
               {product.brand && (
@@ -246,14 +246,14 @@ export default function ProductPage() {
 
             {/* Description */}
             {product.description && (
-              <p className="text-muted-foreground leading-relaxed text-base">
+              <p className="hidden md:block text-muted-foreground leading-relaxed text-base">
                 {product.description}
               </p>
             )}
 
             {/* Features checklist */}
             {product.features && product.features.length > 0 && (
-              <div className="bg-muted/50 rounded-[16px] border border-black/[0.05] p-4">
+              <div className="hidden md:block bg-muted/50 rounded-[16px] border border-black/[0.05] p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
                   {t('whatsIncluded')}
                 </p>
@@ -269,7 +269,7 @@ export default function ProductPage() {
             )}
 
             {/* Price + CTA card */}
-            <div className="bg-card rounded-[20px] border border-black/[0.06] p-6 flex flex-col gap-4 shadow-sm">
+            <div className="bg-card rounded-2xl md:rounded-[20px] border border-black/[0.06] p-4 md:p-6 flex flex-col gap-4 shadow-sm">
               {/* Duration selector */}
               {pricingOptions.length > 1 && (
                 <div className="flex flex-wrap gap-2">
@@ -296,7 +296,7 @@ export default function ProductPage() {
                   </span>
                   {selectedCurrency === 'USD' ? (
                     <div className="flex items-baseline gap-3">
-                      <span className="text-4xl font-display font-bold text-foreground">
+                      <span className="text-3xl md:text-4xl font-display font-bold text-foreground">
                         USD {selectedPrice}
                       </span>
                       {selectedOption.salePriceUsd != null && selectedOption.priceUsd != null && (
@@ -307,7 +307,7 @@ export default function ProductPage() {
                     </div>
                   ) : selectedOption.salePrice != null ? (
                     <div className="flex items-baseline gap-3">
-                      <span className="text-4xl font-display font-bold text-foreground">
+                      <span className="text-3xl md:text-4xl font-display font-bold text-foreground">
                         EGP {selectedPrice}
                       </span>
                       <span className="text-lg text-muted-foreground line-through">
@@ -315,7 +315,7 @@ export default function ProductPage() {
                       </span>
                     </div>
                   ) : (
-                    <span className="text-4xl font-display font-bold text-foreground">
+                    <span className="text-3xl md:text-4xl font-display font-bold text-foreground">
                       EGP {selectedPrice}
                     </span>
                   )}
@@ -334,6 +334,12 @@ export default function ProductPage() {
               >
                 {t('addToCart')}
               </button>
+              <div className="grid grid-cols-2 gap-2 border-t border-black/[0.05] pt-3 text-xs font-semibold text-secondary md:hidden">
+                <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-primary" />{dir === 'rtl' ? 'دفع آمن' : 'Secure payment'}</span>
+                <span className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-primary" />{dir === 'rtl' ? 'ضمان كامل' : 'Full warranty'}</span>
+                <span className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-primary" />{dir === 'rtl' ? 'تفعيل سريع' : 'Fast activation'}</span>
+                <span className="flex items-center gap-1.5"><MessageCircle className="h-4 w-4 text-primary" />{dir === 'rtl' ? 'دعم بعد الشراء' : 'After-sale support'}</span>
+              </div>
               <a
                 href={`https://wa.me/201229327902?text=${encodeURIComponent(
                   lang === 'ar'
@@ -378,11 +384,11 @@ export default function ProductPage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.18 }}
-          className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-4"
+          className="mt-7 md:mt-12 grid grid-cols-2 gap-2 md:gap-4"
         >
           {infoCards.map(({ icon: Icon, label, value }) => (
-            <div key={label} className="bg-card rounded-[20px] border border-black/[0.06] p-6 flex gap-4 shadow-sm">
-              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+            <div key={label} className="bg-card rounded-xl md:rounded-[20px] border border-black/[0.06] p-3 md:p-6 flex flex-col md:flex-row gap-2 md:gap-4 shadow-sm">
+              <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg md:rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                 <Icon className="w-5 h-5" />
               </div>
               <div>
@@ -392,14 +398,24 @@ export default function ProductPage() {
             </div>
           ))}
         </motion.div>
+        {(product.description || (product.features && product.features.length > 0)) && <section className="mt-7 rounded-2xl border border-black/[0.06] bg-white p-5 md:hidden">
+          {product.description && <><h2 className="font-display text-lg font-bold">{dir === 'rtl' ? 'نبذة' : 'Overview'}</h2><p className="mt-2 text-sm leading-7 text-muted-foreground">{product.description}</p></>}
+          {product.features && product.features.length > 0 && <><h2 className="mt-5 font-display text-lg font-bold">{t('whatsIncluded')}</h2><ul className="mt-3 space-y-2">{product.features.map((feature, index) => <li key={index} className="flex items-start gap-2 text-sm leading-6"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-500" /><span>{feature}</span></li>)}</ul></>}
+        </section>}
         {allProducts && allProducts.filter((candidate) => candidate.id !== product.id).length > 0 && (
-          <section className="mt-16">
+          <section className="mt-10 md:mt-16">
             <h2 className="text-2xl font-display font-bold mb-6">{dir === 'rtl' ? 'قد يعجبك أيضاً' : 'You might also like'}</h2>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="grid grid-cols-1 min-[390px]:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {allProducts.filter((candidate) => candidate.id !== product.id).sort((a, b) => Number(b.category === product.category) - Number(a.category === product.category)).slice(0, 3).map((candidate) => <ProductCard key={candidate.id} product={candidate} />)}
             </div>
           </section>
         )}
+      </div>
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/96 px-4 pt-2 shadow-[0_-8px_24px_rgba(15,23,42,.08)] backdrop-blur md:hidden" style={{ paddingBottom: 'max(.5rem, env(safe-area-inset-bottom))' }}>
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <div className="min-w-0 flex-1"><span className="block text-[11px] text-muted-foreground">{t('price')}</span><strong className="block truncate text-lg text-secondary">{selectedCurrency} {selectedPrice}</strong></div>
+          <button onClick={handleAddToCart} disabled={product.availability === 'out_of_stock' || product.availability === 'coming_soon'} className="min-h-12 min-w-[55%] rounded-xl bg-primary px-5 font-bold text-white disabled:opacity-50">{t('addToCart')}</button>
+        </div>
       </div>
     </Layout>
   );
