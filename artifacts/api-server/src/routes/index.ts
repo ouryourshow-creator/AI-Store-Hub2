@@ -10,6 +10,7 @@ import cashbackRouter from "./cashback";
 import reviewsRouter from "./reviews";
 import settingsRouter from "./settings";
 import crmRouter from "./crm";
+import paypalRouter from "./paypal";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(cashbackRouter);
 router.use(reviewsRouter);
 router.use(settingsRouter);
 router.use(crmRouter);
+router.use(paypalRouter);
 
 export default router;

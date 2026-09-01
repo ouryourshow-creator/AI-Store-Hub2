@@ -1,0 +1,19 @@
+export type PayPalCaptureCheck = {
+  localOrderId: number; ownerId: string; authenticatedUserId?: string;
+  orderStatus: string; paymentMethod: string | null; expectedAmount: string;
+  paypalCustomId?: string; paypalStatus?: string; captureStatus?: string;
+  currency?: string; paidAmount?: string; existingCaptureId?: string | null; captureId?: string;
+};
+
+/** Pure integrity gate kept separate so every negative case is regression tested. */
+export function validatePayPalCapture(input: PayPalCaptureCheck): string | null {
+  if (input.authenticatedUserId !== undefined && input.ownerId !== input.authenticatedUserId) return "wrong_user";
+  if (input.orderStatus !== "awaiting_payment") return input.existingCaptureId === input.captureId ? null : "wrong_status";
+  if (input.paymentMethod !== "paypal") return "wrong_method";
+  if (input.paypalCustomId !== String(input.localOrderId)) return "wrong_order";
+  if (input.paypalStatus !== "COMPLETED" || input.captureStatus !== "COMPLETED") return "not_completed";
+  if (input.currency !== "USD") return "wrong_currency";
+  if (input.paidAmount !== input.expectedAmount) return "amount_mismatch";
+  if (input.existingCaptureId && input.existingCaptureId !== input.captureId) return "duplicate_capture";
+  return null;
+}
