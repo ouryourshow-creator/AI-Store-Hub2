@@ -237,26 +237,79 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    if (payCurrency !== 'USD' || paypalSdkState !== 'idle') return;
+    setPaymentMethod(null);
+    setPaypalError('');
     let active = true;
+    let sdkScript: HTMLScriptElement | null = null;
+    let handleSdkLoad: (() => void) | null = null;
+    let handleSdkError: (() => void) | null = null;
+
+    if (payCurrency !== 'USD') {
+      setPaypalSdkState('idle');
+      setCardEligible(false);
+      return () => { active = false; };
+    }
+
     setPaypalSdkState('loading');
-    fetch('/api/paypal/config').then(response => response.json()).then(config => {
-      if (!config.available || !config.clientId) throw new Error('unavailable');
-      const inspectEligibility = () => {
-        if (!active || !window.paypal) return;
+    setCardEligible(false);
+
+    const timeout = window.setTimeout(() => {
+      if (active) setPaypalSdkState('unavailable');
+    }, 15_000);
+
+    const markUnavailable = () => {
+      if (!active) return;
+      window.clearTimeout(timeout);
+      setPaypalSdkState('unavailable');
+      setCardEligible(false);
+    };
+
+    const inspectEligibility = () => {
+      if (!active) return;
+      if (!window.paypal) { markUnavailable(); return; }
+      try {
         setCardEligible(Boolean(window.paypal.CardFields?.({ createOrder: createPayPalOrder })?.isEligible?.()));
-        setPaypalSdkState('ready');
-      };
-      if (window.paypal) { inspectEligibility(); return; }
-      const script = document.createElement('script');
-      script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=USD&intent=capture&components=buttons,card-fields`;
-      script.async = true;
-      script.onload = inspectEligibility;
-      script.onerror = () => active && setPaypalSdkState('unavailable');
-      document.head.appendChild(script);
-    }).catch(() => active && setPaypalSdkState('unavailable'));
-    return () => { active = false; };
-  }, [payCurrency, paypalSdkState]);
+      } catch {
+        // Card Fields eligibility must never prevent the standard PayPal button.
+        setCardEligible(false);
+      }
+      window.clearTimeout(timeout);
+      setPaypalSdkState('ready');
+    };
+
+    void fetch('/api/paypal/config')
+      .then(async response => {
+        if (!response.ok) throw new Error('PayPal configuration request failed');
+        const config = await response.json();
+        if (!config.available || !config.clientId) throw new Error('PayPal is unavailable');
+        if (window.paypal) { inspectEligibility(); return; }
+
+        const sdkUrl = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=USD&intent=capture&components=buttons,card-fields`;
+        sdkScript = document.querySelector<HTMLScriptElement>('script[data-keytopia-paypal-sdk="true"]');
+        if (!sdkScript) {
+          sdkScript = document.createElement('script');
+          sdkScript.src = sdkUrl;
+          sdkScript.async = true;
+          sdkScript.dataset.keytopiaPaypalSdk = 'true';
+          document.head.appendChild(sdkScript);
+        }
+        handleSdkLoad = inspectEligibility;
+        handleSdkError = markUnavailable;
+        sdkScript.addEventListener('load', handleSdkLoad, { once: true });
+        sdkScript.addEventListener('error', handleSdkError, { once: true });
+        // A previously inserted SDK may have completed between the initial check
+        // and listener registration.
+        if (window.paypal) inspectEligibility();
+      })
+      .catch(markUnavailable);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      if (sdkScript && handleSdkLoad) sdkScript.removeEventListener('load', handleSdkLoad);
+      if (sdkScript && handleSdkError) sdkScript.removeEventListener('error', handleSdkError);
+    };
+  }, [payCurrency]);
 
   const handleSendProof = async (selectedMethod: Exclude<PaymentMethod, null> = paymentMethod as Exclude<PaymentMethod, null>) => {
     if (!selectedMethod || createOrder.isPending) return;
