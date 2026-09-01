@@ -1,6 +1,8 @@
 import express, { type Express } from "express";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import cors from "cors";
+import { eq } from "drizzle-orm";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
@@ -12,7 +14,7 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { pool } from "@workspace/db";
+import { db, pool, productsTable } from "@workspace/db";
 
 const PgSession = connectPgSimple(session);
 
@@ -147,6 +149,143 @@ app.use(
 
 app.use("/api", router);
 
+const defaultSocialDescription =
+  "اشترك في أشهر برامج الذكاء الاصطناعي، بأرخص الأسعار.";
+
+function slugifyWithLimit(name: string, wordLimit?: number): string {
+  const words = name.trim().split(/\s+/);
+  const normalized = (wordLimit ? words.slice(0, wordLimit) : words)
+    .join(" ")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return normalized
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+    .replace(/^-+|-+$/g, "") || "product";
+}
+
+function publicProductSlug(name: string, id: number): string {
+  return `${slugifyWithLimit(name, 2)}-${id.toString(36)}`;
+}
+
+function legacyProductSlugs(name: string, id: number): string[] {
+  const suffix = id.toString(36);
+  return [
+    slugifyWithLimit(name, 6),
+    slugifyWithLimit(name),
+    "product",
+  ].map((slug) => `${slug}-${suffix}`);
+}
+
+async function findPublishedProductForSocial(slug: string) {
+  const products = await db
+    .select({
+      id: productsTable.id,
+      name: productsTable.name,
+      slug: productsTable.slug,
+      coverImageUrl: productsTable.coverImageUrl,
+      description: productsTable.description,
+    })
+    .from(productsTable)
+    .where(eq(productsTable.published, true));
+
+  if (/^\d+$/.test(slug)) {
+    const id = Number(slug);
+    return products.find((product) => product.id === id);
+  }
+
+  return products.find((product) =>
+    product.slug === slug ||
+    publicProductSlug(product.name, product.id) === slug ||
+    legacyProductSlugs(product.name, product.id).includes(slug),
+  );
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function socialText(value: string | null | undefined, fallback: string, maxLength: number): string {
+  return (value?.replace(/\s+/g, " ").trim() || fallback).slice(0, maxLength);
+}
+
+function setMetaTag(html: string, attribute: "name" | "property", key: string, value: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tag = `<meta ${attribute}="${key}" content="${escapeHtml(value)}" />`;
+  const existingTag = new RegExp(
+    `<meta\\b(?=[^>]*\\b${attribute}=["']${escapedKey}["'])[^>]*>`,
+    "i",
+  );
+  if (existingTag.test(html)) return html.replace(existingTag, tag);
+  return html.replace(/<\/head>/i, `  ${tag}\n  </head>`);
+}
+
+function setTitle(html: string, title: string): string {
+  const tag = `<title>${escapeHtml(title)}</title>`;
+  if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(html)) {
+    return html.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, tag);
+  }
+  return html.replace(/<\/head>/i, `  ${tag}\n  </head>`);
+}
+
+function setCanonicalLink(html: string, url: string): string {
+  const tag = `<link rel="canonical" href="${escapeHtml(url)}" />`;
+  const existingLink = /<link\b(?=[^>]*\brel=["']canonical["'])[^>]*>/i;
+  if (existingLink.test(html)) return html.replace(existingLink, tag);
+  return html.replace(/<\/head>/i, `  ${tag}\n  </head>`);
+}
+
+async function sendFrontendEntry(req: express.Request, res: express.Response, frontendDist: string): Promise<void> {
+  const productPath = /^\/products\/([^/]+)\/?$/.exec(req.path);
+  if (!productPath) {
+    res.sendFile(path.join(frontendDist, "index.html"));
+    return;
+  }
+
+  try {
+    const slug = decodeURIComponent(productPath[1]);
+    const product = await findPublishedProductForSocial(slug);
+    if (!product) {
+      res.sendFile(path.join(frontendDist, "index.html"));
+      return;
+    }
+
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const pageUrl = new URL(req.originalUrl, origin);
+    pageUrl.hash = "";
+    const title = `${socialText(product.name, "Keytopia Store", 140)} | Keytopia`;
+    const description = socialText(product.description, defaultSocialDescription, 300);
+    const imageUrl = product.coverImageUrl
+      ? new URL(product.coverImageUrl, origin).toString()
+      : new URL("/logo.png", origin).toString();
+    let html = await readFile(path.join(frontendDist, "index.html"), "utf8");
+
+    html = setTitle(html, title);
+    html = setMetaTag(html, "name", "description", description);
+    html = setMetaTag(html, "property", "og:title", title);
+    html = setMetaTag(html, "property", "og:description", description);
+    html = setMetaTag(html, "property", "og:url", pageUrl.toString());
+    html = setMetaTag(html, "property", "og:image", imageUrl);
+    html = setMetaTag(html, "property", "og:image:alt", product.name);
+    html = setMetaTag(html, "name", "twitter:title", title);
+    html = setMetaTag(html, "name", "twitter:description", description);
+    html = setMetaTag(html, "name", "twitter:image", imageUrl);
+    html = setMetaTag(html, "name", "twitter:image:alt", product.name);
+    html = setCanonicalLink(html, pageUrl.toString());
+
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+    res.type("html").send(html);
+  } catch (error) {
+    req.log?.warn({ error }, "Could not generate product social metadata");
+    res.sendFile(path.join(frontendDist, "index.html"));
+  }
+}
+
 // Production publishes one HTTP process, so serve the built SPA from the API
 // server after API routes have had a chance to handle the request.
 if (process.env.NODE_ENV === "production") {
@@ -162,7 +301,7 @@ if (process.env.NODE_ENV === "production") {
       return;
     }
 
-    res.sendFile(path.join(frontendDist, "index.html"));
+    void sendFrontendEntry(req, res, frontendDist);
   });
 }
 
