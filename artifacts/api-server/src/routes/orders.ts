@@ -13,6 +13,7 @@ import {
   ordersTable,
   productsTable,
   promoCodesTable,
+  settingsTable,
 } from "@workspace/db";
 import {
   CreateOrderBody,
@@ -32,6 +33,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/requireAdmin";
 import { referralCodeFor } from "../lib/referrals";
+import { confirmOrder } from "../lib/orderCompletion";
 
 const router: IRouter = Router();
 const orderStatuses = new Set(["awaiting_payment", "payment_proof_received", "confirmed", "fulfilled", "cancelled"]);
@@ -97,18 +99,18 @@ async function withItems(orders: Array<typeof ordersTable.$inferSelect>) {
   return orders.map((order) => mapOrder(order, grouped.get(order.id) ?? []));
 }
 
-function unitPrice(product: ProductRecord, duration: string, currency: "EGP" | "USD"): number | null {
+export function unitPrice(product: ProductRecord, duration: string, currency: "EGP" | "USD", egpPerUsd = 52): number | null {
   const options = product.pricingOptions ?? [];
   const matched = options.find((option) => option.duration === duration);
   if (matched) {
     if (currency === "USD") {
-      return matched.salePriceUsd ?? matched.priceUsd ?? null;
+      return matched.salePriceUsd ?? matched.priceUsd ?? Math.round((matched.salePrice ?? matched.price) / egpPerUsd * 100) / 100;
     }
     return matched.salePrice ?? matched.price;
   }
 
   if (product.duration !== duration) return null;
-  if (currency === "USD") return product.salePriceUsd != null ? Number(product.salePriceUsd) : product.priceUsd != null ? Number(product.priceUsd) : null;
+  if (currency === "USD") return product.salePriceUsd != null ? Number(product.salePriceUsd) : product.priceUsd != null ? Number(product.priceUsd) : Math.round((product.salePrice != null ? Number(product.salePrice) : Number(product.price)) / egpPerUsd * 100) / 100;
   return product.salePrice != null ? Number(product.salePrice) : Number(product.price);
 }
 
@@ -269,6 +271,11 @@ router.post("/orders", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
+  if ((data.currency === "USD" && data.paymentMethod !== "paypal") || (data.currency === "EGP" && !["instapay", "vodafone"].includes(data.paymentMethod ?? ""))) {
+    res.status(400).json({ error: "Payment method is not valid for the selected currency" }); return;
+  }
+  const [rateSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, "egp_usd_rate")).limit(1);
+  const egpPerUsd = rateSetting && Number(rateSetting.value) > 0 ? Number(rateSetting.value) : 52;
   const productIds = [...new Set(data.items.map((item) => item.productId))];
   const products = await db
     .select()
@@ -278,7 +285,7 @@ router.post("/orders", async (req, res): Promise<void> => {
 
   const calculatedItems = data.items.map((requested) => {
     const product = productsById.get(requested.productId);
-    const price = product ? unitPrice(product, requested.duration, data.currency) : null;
+    const price = product ? unitPrice(product, requested.duration, data.currency, egpPerUsd) : null;
     if (!product || price == null || product.availability === "out_of_stock" || product.availability === "coming_soon") return null;
     return {
       product,
@@ -481,6 +488,10 @@ router.patch("/admin/orders/:id/status", requireAdmin, async (req, res): Promise
     res.status(400).json({ error: "Invalid order status update" });
     return;
   }
+  // All confirmation paths, including PayPal, share the same locked, idempotent
+  // transition. The legacy reconciliation below remains responsible for status
+  // changes away from completion and safely becomes a no-op for its side effects.
+  if (completedOrderStatuses.has(body.data.status)) await confirmOrder(params.data.id);
   let result;
   try {
     result = await db.transaction(async (tx) => {
