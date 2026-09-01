@@ -30,7 +30,7 @@ const StatusBadge = ({ status, dir }: { status: string; dir: 'rtl' | 'ltr' }) =>
 export default function Orders() {
   const { isSignedIn, isLoaded, user } = useUser();
   const { signOut } = useClerk();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { dir, t } = useLang();
   const [referral, setReferral] = useState<{ referralCode: string; referralCount: number } | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
@@ -102,6 +102,7 @@ export default function Orders() {
   return (
     <Layout>
       <div className="max-w-6xl mx-auto px-4 py-6 md:px-6 md:py-20">
+        {location.includes('payment=success') && <div role="status" className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5 shrink-0" />{dir === 'rtl' ? 'تم الدفع بنجاح وتأكيد طلبك.' : 'Payment successful. Your order is confirmed.'}</div>}
         <div className="flex items-start justify-between gap-3 mb-6 md:mb-8">
           <div>
             <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground mb-1 md:mb-2">
