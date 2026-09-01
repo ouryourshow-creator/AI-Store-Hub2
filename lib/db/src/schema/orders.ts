@@ -29,12 +29,18 @@ export const ordersTable = pgTable("orders", {
   referralCode: text("referral_code"),
   status: text("status").notNull().default("awaiting_payment"),
   countedAsSold: boolean("counted_as_sold").notNull().default(false),
+  paypalOrderId: text("paypal_order_id"),
+  paypalCaptureId: text("paypal_capture_id"),
+  paypalPaidAmount: numeric("paypal_paid_amount", { precision: 12, scale: 2 }),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => ({
   customerCreatedIdx: index("orders_customer_created_idx").on(table.customerId, table.createdAt),
   statusCreatedIdx: index("orders_status_created_idx").on(table.status, table.createdAt),
   customerIdempotencyKeyUnique: unique("orders_customer_idempotency_key_unique").on(table.customerId, table.idempotencyKey),
+  paypalOrderUnique: unique("orders_paypal_order_id_unique").on(table.paypalOrderId),
+  paypalCaptureUnique: unique("orders_paypal_capture_id_unique").on(table.paypalCaptureId),
 }));
 
 export const orderReferenceSequence = pgSequence("order_reference_seq", { startWith: 1000 });
