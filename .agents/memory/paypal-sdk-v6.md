@@ -14,3 +14,9 @@ The preview workflow and published deployment are separate runtimes. Production 
 **Why:** A production config probe can still show the previous build even when the preview has the corrected route and environment wiring.
 
 **How to apply:** Treat production endpoint results as stale until a publish completes successfully, then recheck the production config endpoint without exposing the client secret.
+
+The canonical Neon order table must contain the PayPal order/capture columns before any server code selects from it; otherwise the shared local-order idempotency lookup fails before PayPal is contacted.
+
+**Why:** PayPal and card checkout both depend on the same local order creation endpoint, so a missing nullable payment column breaks both methods even when SDK eligibility succeeds.
+
+**How to apply:** Keep the additive PayPal schema migration applied to the canonical development database, then publish through the normal production schema process without replacing or resetting existing order data.
