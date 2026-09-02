@@ -271,7 +271,7 @@ router.post("/orders", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
-  if ((data.currency === "USD" && data.paymentMethod !== "paypal") || (data.currency === "EGP" && !["instapay", "vodafone"].includes(data.paymentMethod ?? ""))) {
+  if ((data.currency === "USD" && !["paypal", "card"].includes(data.paymentMethod ?? "")) || (data.currency === "EGP" && !["instapay", "vodafone"].includes(data.paymentMethod ?? ""))) {
     res.status(400).json({ error: "Payment method is not valid for the selected currency" }); return;
   }
   const [rateSetting] = await db.select().from(settingsTable).where(eq(settingsTable.key, "egp_usd_rate")).limit(1);

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, ChevronRight, ChevronLeft, Copy, Check, ExternalLink,
   User, Mail, Phone, CreditCard, Tag, CheckCircle2, AlertCircle,
-  MessageCircle,
+  MessageCircle, Loader2, ShieldCheck, ShoppingBag, ArrowRight, Wallet, Banknote,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { SignIn, useAuth } from '@clerk/react';
@@ -326,793 +326,214 @@ function VodafoneCashLogo() {
 
 export default function Checkout() {
   const { items, clearCart, markCartRecovered } = useCart();
-  const { t, dir } = useLang();
+  const { dir } = useLang();
   const { isLoaded, isSignedIn } = useAuth();
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
-  const isRtl = dir === 'rtl';
-  const createOrder = useCreateOrder();
+  const [, navigate] = useLocation();
+  const createOrderMutation = useCreateOrder();
+  const { data: cashbackAccount } = useGetMyCashback({ query: { enabled: !!isSignedIn, queryKey: getGetMyCashbackQueryKey() } });
+  const { data: exchange } = useGetEgpUsdRate();
+  const rate = exchange?.rate ?? 52;
 
-  const [step, setStep] = useState(1);
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
-  const [payCurrency, setPayCurrency] = useState<PayCurrency>('EGP');
-  const [paypalError, setPaypalError] = useState('');
-  const [paypalBusy, setPaypalBusy] = useState(false);
-  const [paypalSdkState, setPaypalSdkState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
-  const [paypalSdk, setPaypalSdk] = useState<PayPalSdk | null>(null);
-  const [paypalEligible, setPaypalEligible] = useState(false);
-  const [cardEligibility, setCardEligibility] = useState<Exclude<PayPalPaymentMethod, 'paypal'> | null>(null);
-  const preparedPayPalOrderRef = useRef<PayPalOrder | null>(null);
+  const [name, setName] = useState(() => sessionStorage.getItem('checkout_name') ?? '');
+  const [email, setEmail] = useState(() => sessionStorage.getItem('checkout_email') ?? '');
+  const [phone, setPhone] = useState(() => sessionStorage.getItem('checkout_phone') ?? '');
+  const [method, setMethod] = useState<PaymentMethod>(() => (sessionStorage.getItem('checkout_method') as PaymentMethod) ?? null);
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<PromoState>({ status: 'idle', code: '', percentage: 0 });
   const [cashbackInput, setCashbackInput] = useState('');
-  const [appliedCashback, setAppliedCashback] = useState(0);
-  const [cashbackError, setCashbackError] = useState('');
-  const cartCurrency = payCurrency;
-  const idempotencyKeyRef = useRef(crypto.randomUUID());
-  const { data: cashbackAccount, isLoading: cashbackLoading } = useGetMyCashback({
-    query: { enabled: !!isSignedIn, queryKey: getGetMyCashbackQueryKey() },
-  });
-  // Admin-editable EGP->USD fallback rate (see the Settings tab in the admin panel).
-  // 52 is only a last-resort default while the rate is still loading.
-  const { data: egpUsdRateData } = useGetEgpUsdRate();
-  const fallbackEgpPerUsd = egpUsdRateData?.rate ?? 52;
+  const [cashbackUsed, setCashbackUsed] = useState(0);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sdkState, setSdkState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
+  const [sdk, setSdk] = useState<PayPalSdk | null>(null);
+  const [paypalEligible, setPaypalEligible] = useState(false);
+  const [cardMode, setCardMode] = useState<Exclude<PayPalPaymentMethod, 'paypal'> | null>(null);
+  const [confirmation, setConfirmation] = useState<any>(null);
+  const localOrderRef = useRef<any>(null);
+  const idempotencyKeyRef = useRef(sessionStorage.getItem('checkout_idempotency') || crypto.randomUUID());
 
-  const egpCartTotal = items.reduce((sum, item) => sum + getItemEgpUnitPrice(item, fallbackEgpPerUsd) * item.quantity, 0);
-  const baseTotal = payCurrency === 'USD' ? items.reduce((sum, item) => sum + getItemUsdUnitPrice(item, fallbackEgpPerUsd) * item.quantity, 0) : egpCartTotal;
-  const discountAmount = promo.status === 'valid' ? Math.round(baseTotal * promo.percentage) / 100 : 0;
-  const beforeCashbackTotal = Math.max(0, baseTotal - discountAmount);
-  const availableCashback = cashbackAccount?.balances.find((balance) => balance.currency === cartCurrency)?.available ?? 0;
-  const finalTotal = Math.max(0, beforeCashbackTotal - appliedCashback);
-  const cashbackToEarn = Math.round(finalTotal * 5) / 100;
+  const currency: PayCurrency = method === 'paypal' || method === 'card' ? 'USD' : 'EGP';
+  const subtotal = items.reduce((sum, item) => sum + (currency === 'USD' ? getItemUsdUnitPrice(item, rate) : getItemEgpUnitPrice(item, rate)) * item.quantity, 0);
+  const discount = promo.status === 'valid' ? Math.round(subtotal * promo.percentage) / 100 : 0;
+  const beforeCashback = Math.max(0, subtotal - discount);
+  const availableCashback = cashbackAccount?.balances.find(b => b.currency === currency)?.available ?? 0;
+  const total = Math.max(0, beforeCashback - cashbackUsed);
+  const productCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const customerFieldsReady = Boolean(
+    name.trim()
+    && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    && /^[+\d][\d\s()-]{7,}$/.test(phone),
+  );
 
-  const handleApplyPromo = async () => {
+  useEffect(() => {
+    sessionStorage.setItem('checkout_idempotency', idempotencyKeyRef.current);
+    sessionStorage.setItem('checkout_name', name);
+    sessionStorage.setItem('checkout_email', email);
+    sessionStorage.setItem('checkout_phone', phone);
+    if (method) sessionStorage.setItem('checkout_method', method);
+  }, [name, email, phone, method]);
+
+  const validCustomer = () => {
+    if (!name.trim()) return setError('يرجى إدخال الاسم الكامل.'), false;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError('يرجى إدخال بريد إلكتروني صحيح.'), false;
+    if (!/^[+\d][\d\s()-]{7,}$/.test(phone)) return setError('يرجى إدخال رقم هاتف صحيح.'), false;
+    return true;
+  };
+
+  const applyPromo = async () => {
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
     setPromo({ status: 'loading', code: '', percentage: 0 });
     try {
-      const res = await fetch('/api/promo-codes/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, productIds: items.map(i => i.id) }),
-      });
-      const data = await res.json();
-      if (data.valid) {
-        setPromo({ status: 'valid', code: data.code, percentage: data.percentage });
-      } else {
-        setPromo({ status: 'invalid', code: '', percentage: 0 });
-      }
-    } catch {
-      setPromo({ status: 'invalid', code: '', percentage: 0 });
-    }
+      const response = await fetch('/api/promo-codes/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, productIds: items.map(i => i.id) }) });
+      const result = await response.json();
+      setPromo(result.valid ? { status: 'valid', code: result.code, percentage: result.percentage } : { status: 'invalid', code: '', percentage: 0 });
+    } catch { setPromo({ status: 'invalid', code: '', percentage: 0 }); }
   };
 
-  const clearPromo = () => {
-    setPromo({ status: 'idle', code: '', percentage: 0 });
-    setPromoInput('');
-  };
+  const orderInput = (selected: Exclude<PaymentMethod, null>) => ({
+    customerName: name.trim(), customerEmail: email.trim(), customerPhone: phone.trim(),
+    currency: selected === 'paypal' || selected === 'card' ? 'USD' as const : 'EGP' as const,
+    idempotencyKey: idempotencyKeyRef.current, promoCode: promo.status === 'valid' ? promo.code : null,
+    cashbackAmount: cashbackUsed || undefined, referralCode: localStorage.getItem('keytopia_referral') ?? undefined,
+    paymentMethod: selected,
+    items: items.map(item => ({ productId: item.id, duration: item.selectedDuration, quantity: item.quantity })),
+  });
 
-  const handleApplyCashback = () => {
-    const amount = Math.round(Number(cashbackInput) * 100) / 100;
-    if (!Number.isFinite(amount) || amount <= 0 || amount > availableCashback || amount > beforeCashbackTotal) {
-      setCashbackError(t('cashbackInvalid'));
-      return;
-    }
-    setAppliedCashback(amount);
-    setCashbackError('');
-  };
-
-  const clearCashback = () => {
-    setAppliedCashback(0);
-    setCashbackInput('');
-    setCashbackError('');
-  };
-
-  const handleClose = () => setLocation('/');
-
-  const handleStep1Next = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !phone.trim()) return;
-    setStep(2);
-  };
-
-  const handlePayPalContinue = async (method: Exclude<PayPalMethod, null>) => {
-    if (
-      paypalBusy
-      || paypalSdkState !== 'ready'
-      || (method === 'paypal' && !paypalEligible)
-      || (method === 'card' && !cardEligibility)
-    ) return;
-    setPaymentMethod(method);
-    setPaypalError('');
-    try {
-      preparedPayPalOrderRef.current = await createPayPalOrder();
-      setStep(3);
-    } catch (error) {
-      reportPayPalError(error, 'Prepare PayPal checkout');
-      setPaypalError(method === 'card'
-        ? (isRtl ? 'تعذر بدء الدفع بالبطاقة. حاول مرة أخرى.' : 'Card payment could not start. Please try again.')
-        : (isRtl ? 'PayPal غير متاح حالياً. حاول مرة أخرى لاحقاً.' : 'PayPal is currently unavailable. Please try again later.'));
-    }
-  };
-
-  const handlePaymentSelect = (method: PaymentMethod) => {
-    setPaymentMethod(method);
-    setPaypalError('');
-    setStep(3);
-  };
-
-  const handlePaymentContinue = () => {
-    if (!paymentMethod) return;
-    if (payCurrency === 'USD') {
-      void handlePayPalContinue(paymentMethod as Exclude<PayPalMethod, null>);
-    } else {
-      handlePaymentSelect(paymentMethod);
-    }
+  const createLocalOrder = async (selected: Exclude<PaymentMethod, null>) => {
+    if (localOrderRef.current) return localOrderRef.current;
+    const order = await createOrderMutation.mutateAsync({ data: orderInput(selected) });
+    localOrderRef.current = order;
+    return order;
   };
 
   const createPayPalOrder = async (): Promise<PayPalOrder> => {
-    if (paypalBusy) throw new Error('busy');
-    const preparedOrder = preparedPayPalOrderRef.current;
-    if (preparedOrder) {
-      preparedPayPalOrderRef.current = null;
-      return preparedOrder;
-    }
-    setPaypalBusy(true); setPaypalError('');
+    if (!method || (method !== 'paypal' && method !== 'card')) throw new Error('اختر وسيلة دفع تلقائية.');
+    setBusy(true); setError('');
     try {
-      const order = await createOrder.mutateAsync({ data: { customerName: name.trim(), customerEmail: email.trim(), customerPhone: phone.trim(), currency: 'USD', idempotencyKey: idempotencyKeyRef.current, promoCode: promo.status === 'valid' ? promo.code : null, cashbackAmount: appliedCashback || undefined, referralCode: localStorage.getItem('keytopia_referral') ?? undefined, paymentMethod: 'paypal', items: items.map(item => ({ productId: item.id, duration: item.selectedDuration, quantity: item.quantity })) } });
+      const order = await createLocalOrder(method);
       const response = await fetch('/api/paypal/orders', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localOrderId: order.id }) });
-      const result = await response.json().catch(() => ({})) as unknown;
-      if (!response.ok) {
-        throw new PayPalCheckoutError(errorPayload(result), response.status, 'PayPal is currently unavailable');
-      }
-      if (!result || typeof result !== 'object' || typeof (result as Record<string, unknown>).paypalOrderId !== 'string') {
-        throw new PayPalCheckoutError({}, response.status, 'PayPal is currently unavailable');
-      }
-      return { orderId: (result as Record<string, unknown>).paypalOrderId as string };
-    } catch (error) {
-      reportPayPalError(error, 'Create PayPal order');
-      throw error;
-    } finally { setPaypalBusy(false); }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new PayPalCheckoutError(errorPayload(result), response.status, 'تعذر إنشاء عملية الدفع.');
+      return { orderId: result.paypalOrderId };
+    } finally { setBusy(false); }
   };
-  const capturePayPalOrder = async (paypalOrderId: string) => {
-    if (paypalBusy) return; setPaypalBusy(true); setPaypalError('');
+
+  const whatsappUrl = (order: any, automatic: boolean) => {
+    const methodName = method === 'paypal' ? 'PayPal' : method === 'card' ? 'بطاقة ائتمان أو خصم' : method === 'instapay' ? 'InstaPay' : 'Vodafone Cash';
+    const lines = order.items.map((item: any) => `• ${item.productName} (${item.duration}) ×${item.quantity}`).join('\n');
+    const note = automatic
+      ? `تم الدفع تلقائياً باستخدام ${methodName} ولا يلزم إرسال إثبات دفع.`
+      : 'يرجى إرفاق صورة إيصال التحويل يدوياً في هذه المحادثة.';
+    return `${WA_LINK}?text=${encodeURIComponent(`مرحباً كيتوبيا،\n${note}\n\nرقم الطلب: ${order.orderNumber}\nالمنتجات:\n${lines}\nالمبلغ: ${order.total} ${order.currency}\nالاسم: ${order.customerName}\nالبريد: ${order.customerEmail}\nالهاتف: ${order.customerPhone}\nطريقة الدفع: ${methodName}`)}`;
+  };
+
+  const finish = async (order: any, automatic: boolean) => {
+    await markCartRecovered(order.id);
+    clearCart();
+    queryClient.invalidateQueries({ queryKey: getGetMyCashbackQueryKey() });
+    sessionStorage.removeItem('checkout_idempotency');
+    setConfirmation({ order, automatic, whatsapp: whatsappUrl(order, automatic) });
+  };
+
+  const capture = async (paypalOrderId: string) => {
+    if (busy) return;
+    setBusy(true); setError('');
     try {
       const response = await fetch(`/api/paypal/orders/${encodeURIComponent(paypalOrderId)}/capture`, { method: 'POST', credentials: 'include' });
-      const result = await response.json().catch(() => ({})) as unknown;
-      if (!response.ok) throw new PayPalCheckoutError(errorPayload(result), response.status, 'Payment capture failed');
-      if (!result || typeof result !== 'object' || !(result as Record<string, unknown>).completed) throw new Error('Capture declined');
-      await markCartRecovered((result as Record<string, unknown>).orderId as number);
-      clearCart(); setLocation('/orders?payment=success');
-    } catch (error) {
-      reportPayPalError(error, 'Capture PayPal order');
-      setPaypalError(error instanceof PayPalCheckoutError
-        ? (isRtl ? 'PayPal غير متاح حالياً. حاول مرة أخرى لاحقاً.' : 'PayPal is currently unavailable. Please try again later.')
-        : error instanceof Error ? error.message : 'Payment failed');
-    }
-    finally { setPaypalBusy(false); }
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.completed) throw new PayPalCheckoutError(errorPayload(result), response.status, 'لم يتم تأكيد الدفع.');
+      await finish(localOrderRef.current, true);
+    } catch (e) {
+      reportPayPalError(e, 'capture');
+      setError(e instanceof PayPalCheckoutError && e.payload.code === 'paypal_payment_verification_failed' ? 'تعذر التحقق من تفاصيل الدفع. لم يتم خصم الطلب.' : 'لم تكتمل عملية الدفع. تحقق من وسيلة الدفع وحاول مرة أخرى.');
+    } finally { setBusy(false); }
+  };
+
+  const submitManual = async () => {
+    if (busy || !method || !['instapay', 'vodafone'].includes(method) || !validCustomer()) return;
+    setBusy(true); setError('');
+    try { await finish(await createLocalOrder(method), false); }
+    catch { setError('تعذر إنشاء الطلب. تحقق من بياناتك واتصال الإنترنت ثم حاول مرة أخرى.'); }
+    finally { setBusy(false); }
   };
 
   useEffect(() => {
-    setPaymentMethod(null);
-    setPaypalError('');
-    preparedPayPalOrderRef.current = null;
-    setPaypalSdk(null);
-    setPaypalEligible(false);
-    setCardEligibility(null);
+    if (method !== 'paypal' && method !== 'card') { setSdkState('idle'); return; }
     let active = true;
-    let sdkScript: HTMLScriptElement | null = null;
-
-    if (payCurrency !== 'USD') {
-      setPaypalSdkState('idle');
-      return () => { active = false; };
-    }
-
-    setPaypalSdkState('loading');
-
-    const timeout = window.setTimeout(() => {
-      if (active) setPaypalSdkState('unavailable');
-    }, 15_000);
-
-    const markUnavailable = () => {
-      if (!active) return;
-      window.clearTimeout(timeout);
-      setPaypalSdkState('unavailable');
-      setPaypalSdk(null);
-      setPaypalEligible(false);
-      setCardEligibility(null);
-    };
-
-    const loadSdk = async () => {
+    setSdkState('loading'); setError('');
+    (async () => {
       const configResponse = await fetch('/api/paypal/config');
-      if (!configResponse.ok) throw new Error('PayPal configuration request failed');
-      const config = await configResponse.json() as { available?: boolean; clientId?: string; environment?: 'sandbox' | 'live' };
-      if (!config.available || !config.clientId) throw new Error('PayPal is unavailable');
-
+      const config = await configResponse.json();
+      if (!configResponse.ok || !config.available || !config.clientId) throw new Error('unavailable');
       if (!window.paypal?.createInstance) {
-        const sdkUrl = config.environment === 'live'
-          ? 'https://www.paypal.com/web-sdk/v6/core'
-          : 'https://www.sandbox.paypal.com/web-sdk/v6/core';
-        sdkScript = document.querySelector<HTMLScriptElement>('script[data-keytopia-paypal-sdk-v6="true"]');
-        if (sdkScript && sdkScript.src !== sdkUrl) {
-          sdkScript.remove();
-          sdkScript = null;
-        }
-        if (!sdkScript) {
-          sdkScript = document.createElement('script');
-          sdkScript.src = sdkUrl;
-          sdkScript.async = true;
-          sdkScript.dataset.keytopiaPaypalSdkV6 = 'true';
-          document.head.appendChild(sdkScript);
-        }
-        await new Promise<void>((resolve, reject) => {
-          if (window.paypal?.createInstance) {
-            resolve();
-            return;
-          }
-          const onLoad = () => resolve();
-          const onError = () => reject(new Error('PayPal SDK failed to load'));
-          sdkScript?.addEventListener('load', onLoad, { once: true });
-          sdkScript?.addEventListener('error', onError, { once: true });
-        });
+        const src = config.environment === 'live' ? 'https://www.paypal.com/web-sdk/v6/core' : 'https://www.sandbox.paypal.com/web-sdk/v6/core';
+        let script = document.querySelector<HTMLScriptElement>('script[data-keytopia-paypal-sdk-v6]');
+        if (!script) { script = document.createElement('script'); script.src = src; script.async = true; script.dataset.keytopiaPaypalSdkV6 = 'true'; document.head.appendChild(script); }
+        await new Promise<void>((resolve, reject) => { if (window.paypal?.createInstance) return resolve(); script!.addEventListener('load', () => resolve(), { once: true }); script!.addEventListener('error', reject, { once: true }); });
       }
-
-      if (!active || !window.paypal?.createInstance) return;
-      const sdk = await window.paypal.createInstance({
-        clientId: config.clientId,
-        components: ['paypal-payments', 'card-fields', 'paypal-guest-payments'],
-        pageType: 'checkout',
-      });
-      const paymentMethods = await sdk.findEligibleMethods({
-        currencyCode: 'USD',
-        amount: finalTotal.toFixed(2),
-      });
-      const eligiblePaypal = paymentMethods.isEligible('paypal');
-      const eligibleAdvancedCards = paymentMethods.isEligible('advanced_cards');
-      const eligibleGuestCards = paymentMethods.isEligible('card');
-      if (import.meta.env.DEV) {
-        console.debug('[PayPal v6] eligibility', {
-          paypal: eligiblePaypal,
-          card: eligibleGuestCards,
-          advanced_cards: eligibleAdvancedCards,
-        });
-      }
+      if (!active || !window.paypal) return;
+      const instance = await window.paypal.createInstance({ clientId: config.clientId, components: ['paypal-payments', 'card-fields', 'paypal-guest-payments'], pageType: 'checkout' });
+      const eligible = await instance.findEligibleMethods({ currencyCode: 'USD', amount: total.toFixed(2) });
       if (!active) return;
-      setPaypalSdk(sdk);
-      setPaypalEligible(eligiblePaypal);
-      setCardEligibility(eligibleAdvancedCards ? 'advanced_cards' : eligibleGuestCards ? 'card' : null);
-      setPaypalSdkState('ready');
-    };
+      setSdk(instance); setPaypalEligible(eligible.isEligible('paypal'));
+      setCardMode(eligible.isEligible('advanced_cards') ? 'advanced_cards' : eligible.isEligible('card') ? 'card' : null);
+      setSdkState('ready');
+    })().catch(() => { if (active) setSdkState('unavailable'); });
+    return () => { active = false; };
+  }, [method, total]);
 
-    void loadSdk().catch(markUnavailable);
-
-    return () => {
-      active = false;
-      window.clearTimeout(timeout);
-    };
-  }, [payCurrency, finalTotal]);
-
-  const handleSendProof = async (selectedMethod: Exclude<PaymentMethod, null> = paymentMethod as Exclude<PaymentMethod, null>) => {
-    if (!selectedMethod || createOrder.isPending) return;
-    // Open during the click. Opening after the async order request is blocked by browsers.
-    const proofWindow = window.open('', '_blank');
-    if (proofWindow) {
-      proofWindow.document.title = isRtl ? 'جار تجهيز الطلب...' : 'Preparing your order...';
-      proofWindow.document.body.textContent = isRtl ? 'جار فتح واتساب...' : 'Opening WhatsApp...';
-      proofWindow.opener = null;
-    }
-    const methodLabel: Record<string, string> = {
-      instapay: 'Instapay',
-      vodafone: isRtl ? 'فودافون كاش' : 'Vodafone Cash',
-    };
-    try {
-      const order = await createOrder.mutateAsync({
-        data: {
-          customerName: name.trim(),
-          customerEmail: email.trim(),
-          customerPhone: phone.trim(),
-          currency: cartCurrency,
-          idempotencyKey: idempotencyKeyRef.current,
-          promoCode: promo.status === 'valid' ? promo.code : null,
-          cashbackAmount: appliedCashback || undefined,
-          referralCode: localStorage.getItem('keytopia_referral') ?? undefined,
-          paymentMethod: selectedMethod,
-          items: items.map(item => ({
-            productId: item.id,
-            duration: item.selectedDuration,
-            quantity: item.quantity,
-          })),
-        },
-      });
-      const orderLines = order.items.map(
-        item => `• ${item.productName} (${item.duration}) ×${item.quantity} — ${order.currency} ${item.lineTotal}`
-      ).join('\n');
-      const promoLine = order.discount > 0 ? `\n${t('discount')}: -${order.currency} ${order.discount}` : '';
-      const cashbackLine = appliedCashback > 0
-        ? `\n${isRtl ? 'الكاش باك المستخدم' : 'Cashback redeemed'}: -${cartCurrency} ${appliedCashback.toFixed(2)}`
-        : '';
-      const method = methodLabel[selectedMethod] ?? selectedMethod;
-      const msg = isRtl
-        ? `مرحباً، أرسل لكم إيصال الدفع لطلبي من كيتوبيا.\n\nرقم الحجز: ${order.orderNumber}\nالاسم: ${name}\nالبريد: ${email}\nالهاتف: ${phone}\n\nالطلب:\n${orderLines}${promoLine}${cashbackLine}\n\nالإجمالي: ${order.currency} ${order.total}\nطريقة الدفع: ${method}\n\n[أرجو إرفاق إيصال الدفع]\n\nهذا هو الإيصال`
-        : `Hello, I am sending payment proof for my Keytopia order.\n\nBooking number: ${order.orderNumber}\nName: ${name}\nEmail: ${email}\nPhone: ${phone}\n\nOrder:\n${orderLines}${promoLine}${cashbackLine}\n\nTotal: ${order.currency} ${order.total}\nPayment method: ${method}\n\n[Please attach payment proof]`;
-      const proofUrl = `${WA_LINK}?text=${encodeURIComponent(msg)}`;
-      if (proofWindow) proofWindow.location.replace(proofUrl);
-      else window.location.assign(proofUrl);
-      queryClient.invalidateQueries({ queryKey: getGetMyCashbackQueryKey() });
-      await markCartRecovered(order.id);
-      clearCart();
-      setLocation('/orders');
-    } catch {
-      proofWindow?.close();
-      // The generated mutation retains its error state for the checkout button message.
-    }
+  const selectMethod = (next: Exclude<PaymentMethod, null>) => {
+    if (busy) return;
+    if (method !== next) { localOrderRef.current = null; idempotencyKeyRef.current = crypto.randomUUID(); sessionStorage.setItem('checkout_idempotency', idempotencyKeyRef.current); }
+    setMethod(next); setCashbackUsed(0); setCashbackInput(''); setError('');
   };
 
-  const inputCls = 'w-full bg-muted border border-transparent rounded-[14px] px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-primary outline-none transition-all';
+  if (confirmation) {
+    const { order, automatic, whatsapp } = confirmation;
+    return <Layout><main className="min-h-[75vh] bg-slate-50 px-4 py-10" dir="rtl"><section className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-xl shadow-slate-200/50 sm:p-10">
+      <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-emerald-100"><CheckCircle2 className="h-9 w-9 text-emerald-600" /></div>
+      <p className="mt-5 text-sm font-bold text-primary">رقم الطلب #{order.orderNumber}</p><h1 className="mt-2 text-2xl font-bold text-slate-950">{automatic ? 'تم الدفع بنجاح' : 'تم إنشاء طلبك'}</h1>
+      <div className="mt-6 rounded-2xl bg-slate-50 p-4 text-right"><div className="flex justify-between"><span>حالة الدفع</span><strong className={automatic ? 'text-emerald-700' : 'text-amber-700'}>{automatic ? 'مدفوع' : 'في انتظار الدفع'}</strong></div><div className="mt-3 flex justify-between"><span>المبلغ</span><strong dir="ltr">{order.total} {order.currency}</strong></div></div>
+      {!automatic && method === 'instapay' && <div className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-5 text-right"><h2 className="font-bold">الدفع عبر InstaPay</h2><p className="mt-2 text-sm">حوّل المبلغ الموضح بالكامل، ثم أرسل صورة التحويل عبر واتساب.</p><div className="mt-4 flex gap-2"><a className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-primary px-3 font-bold text-white" href={PAYMENT_INFO.instapay.link} target="_blank" rel="noreferrer">فتح InstaPay</a><CopyButton text={String(order.total)} /></div></div>}
+      {!automatic && method === 'vodafone' && <div className="mt-5 rounded-2xl border border-red-100 bg-red-50 p-5 text-right"><h2 className="font-bold">التحويل إلى Vodafone Cash</h2><p className="mt-2 text-sm">حوّل المبلغ بالكامل إلى الرقم التالي، ثم احتفظ بصورة التحويل.</p><div className="mt-4 flex items-center justify-between rounded-xl bg-white p-3"><strong dir="ltr">{PAYMENT_INFO.vodafone.number}</strong><div className="flex"><CopyButton text={PAYMENT_INFO.vodafone.number} /><CopyButton text={String(order.total)} /></div></div></div>}
+      <a href={whatsapp} target="_blank" rel="noreferrer" className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#20b858] px-5 font-bold text-white"><MessageCircle className="h-5 w-5" />{automatic ? 'إرسال تفاصيل الطلب عبر واتساب' : 'إرسال إثبات الدفع عبر واتساب'}</a>
+      <button onClick={() => navigate('/orders')} className="mt-3 min-h-12 w-full text-sm font-bold text-slate-600">عرض طلباتي</button>
+    </section></main></Layout>;
+  }
 
-  const steps = [
-    { n: 1, label: isRtl ? 'معلوماتك' : 'Your Info' },
-    { n: 2, label: isRtl ? 'الدفع' : 'Payment' },
-    { n: 3, label: payCurrency === 'EGP' ? (isRtl ? 'إيصال الدفع' : 'Payment proof') : (isRtl ? 'تأكيد الطلب' : 'Confirm order') },
+  if (!items.length) return <Layout><div className="grid min-h-[65vh] place-items-center bg-slate-50 px-4" dir="rtl"><div className="max-w-md text-center"><ShoppingBag className="mx-auto h-12 w-12 text-slate-300"/><h1 className="mt-4 text-2xl font-bold">سلة التسوق فارغة</h1><p className="mt-2 text-slate-500">أضف منتجاً إلى سلتك قبل متابعة الدفع.</p><button onClick={() => navigate('/')} className="mt-6 min-h-12 rounded-xl bg-primary px-8 font-bold text-white">العودة إلى المتجر</button></div></div></Layout>;
+  if (!isLoaded || !isSignedIn) return <Layout><div className="grid min-h-[65vh] place-items-center bg-slate-50 px-4">{!isLoaded ? <Loader2 className="h-8 w-8 animate-spin text-primary"/> : <SignIn routing="path" path={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-in`} forceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/checkout`} />}</div></Layout>;
+
+  const methods = [
+    { id: 'instapay' as const, title: 'InstaPay', description: 'تحويل فوري آمن عبر تطبيق InstaPay', icon: <InstapayLogo />, currency: 'EGP' },
+    { id: 'vodafone' as const, title: 'Vodafone Cash', description: 'تحويل إلى محفظة فودافون كاش', icon: <VodafoneCashLogo />, currency: 'EGP' },
+    { id: 'paypal' as const, title: 'PayPal', description: 'الدفع من رصيدك أو حسابك على PayPal', icon: <PaypalLogo />, currency: 'USD' },
+    { id: 'card' as const, title: 'بطاقة ائتمان أو خصم', description: 'Visa أو Mastercard عبر بوابة PayPal الآمنة', icon: <div className="flex gap-1"><VisaLogo/><MastercardLogo/></div>, currency: 'USD' },
   ];
+  const cta = method === 'paypal' ? 'الدفع باستخدام PayPal' : method === 'card' ? 'الدفع بالبطاقة' : method === 'instapay' ? 'المتابعة إلى InstaPay' : method === 'vodafone' ? 'عرض بيانات Vodafone Cash' : 'اختر وسيلة الدفع';
 
-  if (items.length === 0) {
-    return (
-      <Layout>
-        <div className="flex min-h-[60vh] items-center justify-center bg-[#F7F9FC] px-4 py-12" dir={dir}>
-          <div className="w-full max-w-md rounded-[24px] border border-black/[0.04] bg-white p-8 text-center shadow-sm">
-            <h1 className="text-2xl font-display font-bold text-foreground">{t('cartEmpty')}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{t('cartEmptySub')}</p>
-            <button type="button" onClick={handleClose} className="mt-6 w-full rounded-[16px] bg-primary px-5 py-3 font-semibold text-white">
-              {isRtl ? 'العودة إلى المتجر' : 'Back to store'}
-            </button>
+  return <Layout><main className="bg-[#f6f8fb]" dir="rtl">
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-10">
+      <button onClick={() => navigate('/')} className="mb-5 flex min-h-11 items-center gap-2 text-sm font-bold text-slate-600 hover:text-primary"><ArrowRight className="h-4 w-4"/>العودة إلى السلة والمتجر</button>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(360px,.92fr)]">
+        <section className="order-2 space-y-5 lg:order-1">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-primary"><User className="h-5 w-5"/></div><div><h1 className="text-xl font-bold text-slate-950">بيانات العميل</h1><p className="text-sm text-slate-500">سنستخدمها لتأكيد وتسليم طلبك فقط</p></div></div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2 text-sm font-bold">الاسم الكامل<input value={name} onChange={e=>setName(e.target.value)} autoComplete="name" className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-blue-100" placeholder="اكتب اسمك الكامل"/></label><label className="text-sm font-bold">البريد الإلكتروني<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-blue-100" placeholder="name@example.com" dir="ltr"/></label><label className="text-sm font-bold">رقم الهاتف<input type="tel" value={phone} onChange={e=>setPhone(e.target.value)} autoComplete="tel" className="mt-2 min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 outline-none focus:border-primary focus:ring-2 focus:ring-blue-100" placeholder="01xxxxxxxxx" dir="ltr"/></label></div>
           </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  if (!isLoaded || !isSignedIn) {
-    return (
-      <Layout>
-        <div className="flex min-h-[60vh] items-center justify-center bg-[#F7F9FC] px-4 py-12">
-          {!isLoaded ? (
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          ) : (
-            <SignIn
-              routing="path"
-              path={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-in`}
-              signUpUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/sign-up`}
-              forceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/checkout`}
-              signUpForceRedirectUrl={`${import.meta.env.BASE_URL?.replace(/\/$/, '') || ''}/checkout`}
-            />
-          )}
-        </div>
-      </Layout>
-    );
-  }
-
-  return (
-    <Layout>
-      <div className="w-full bg-[#F7F9FC] px-4 py-8 pb-32 md:py-12 md:pb-12">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="bg-card w-full max-w-2xl mx-auto rounded-[24px] shadow-lg border border-black/[0.04] overflow-hidden"
-          dir={dir}
-        >
-            {/* Header */}
-            <div className="relative flex items-center justify-between px-6 pt-6 pb-4">
-              <div className="flex items-center gap-2">
-                {step > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setStep((current) => Math.max(1, current - 1))}
-                    aria-label={isRtl ? 'الرجوع للخطوة السابقة' : 'Go back to the previous step'}
-                    className="p-2 -ms-2 rounded-full hover:bg-muted transition-colors text-muted-foreground"
-                  >
-                    {isRtl ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-                  </button>
-                )}
-                <h1 className="text-xl font-display font-bold">{t('completeOrder')}</h1>
-              </div>
-              <button onClick={handleClose} aria-label={isRtl ? 'إغلاق صفحة الدفع' : 'Close checkout'} className="p-2 rounded-full hover:bg-muted transition-colors text-muted-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Step indicators */}
-            <div className="px-6 pb-5">
-              <div className="flex items-center gap-0">
-                {steps.map((s, idx) => (
-                  <div key={s.n} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
-                        step > s.n
-                          ? 'bg-[#1CC88A] text-white'
-                          : step === s.n
-                          ? 'bg-primary text-white shadow-md shadow-primary/30'
-                          : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {step > s.n ? <Check className="w-4 h-4" /> : s.n}
-                      </div>
-                      <span className={`text-[10px] font-semibold transition-colors ${step === s.n ? 'text-primary' : 'text-muted-foreground'}`}>
-                        {s.label}
-                      </span>
-                    </div>
-                    {idx < steps.length - 1 && (
-                      <div className={`flex-1 h-0.5 mx-2 mb-5 rounded-full transition-colors duration-300 ${step > s.n ? 'bg-[#1CC88A]' : 'bg-muted'}`} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Step content */}
-            <div className="px-6 pb-6">
-              <AnimatePresence mode="wait">
-
-                {/* ── Step 1: Contact Info ── */}
-                {step === 1 && (
-                  <motion.form
-                    key="step1"
-                    initial={{ opacity: 0, x: isRtl ? -20 : 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                    transition={{ duration: 0.2 }}
-                    onSubmit={handleStep1Next}
-                    className="flex flex-col gap-4"
-                  >
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 ms-1">
-                        <User className="w-3 h-3" />{t('fullName')}
-                      </label>
-                      <input type="text" required value={name} onChange={e => setName(e.target.value)}
-                        placeholder={t('fullNamePlaceholder')} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 ms-1">
-                        <Mail className="w-3 h-3" />{t('emailAddress')}
-                      </label>
-                      <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                        placeholder={t('emailPlaceholder')} dir="ltr" className={inputCls} />
-                    </div>
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 ms-1">
-                        <Phone className="w-3 h-3" />{t('phoneNumber')}
-                      </label>
-                      <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)}
-                        placeholder={t('phonePlaceholder')} dir="ltr" className={inputCls} />
-                    </div>
-
-                    {/* Promo code */}
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 ms-1">
-                        <Tag className="w-3 h-3" />{t('promoCode')} <span className="normal-case text-[10px] font-normal">({t('optional')})</span>
-                      </label>
-                      {promo.status === 'valid' ? (
-                        <div className="flex items-center gap-3 bg-[#1CC88A]/10 border border-[#1CC88A]/30 rounded-[14px] px-4 py-3">
-                          <CheckCircle2 className="w-4 h-4 text-[#1CC88A] flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-[#1CC88A]">{t('promoApplied')}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{promo.code} — {promo.percentage}% {t('discount')}</p>
-                          </div>
-                          <button type="button" onClick={clearPromo} className="p-1 rounded-full hover:bg-black/10 transition-colors">
-                            <X className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input type="text" value={promoInput}
-                            onChange={e => { setPromoInput(e.target.value.toUpperCase()); if (promo.status === 'invalid') setPromo({ status: 'idle', code: '', percentage: 0 }); }}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
-                            placeholder={t('promoCodePlaceholder')} dir="ltr"
-                            className="flex-1 bg-muted border-none rounded-[14px] px-4 py-3.5 text-sm font-mono tracking-widest placeholder:font-sans placeholder:tracking-normal placeholder:text-muted-foreground text-foreground focus:ring-2 focus:ring-primary outline-none transition-all" />
-                          <button type="button" onClick={handleApplyPromo}
-                            disabled={!promoInput.trim() || promo.status === 'loading'}
-                            className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-sm rounded-[14px] transition-all disabled:opacity-50 whitespace-nowrap">
-                            {promo.status === 'loading' ? '...' : t('applyPromo')}
-                          </button>
-                        </div>
-                      )}
-                      {promo.status === 'invalid' && (
-                        <p className="mt-1.5 text-xs text-destructive flex items-center gap-1 ms-1">
-                          <AlertCircle className="w-3 h-3 flex-shrink-0" />{t('promoInvalid')}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Order summary */}
-                    <div className="rounded-[16px] border border-emerald-200 bg-emerald-50/60 p-4">
-                      <div className="flex items-center justify-between gap-3 mb-2">
-                        <div>
-                          <p className="text-sm font-bold text-emerald-800">{t('cashbackUse')}</p>
-                          <p className="text-xs text-emerald-700/80">{t('cashbackAvailable')}</p>
-                        </div>
-                        <span className="font-display font-bold text-emerald-700">
-                          {cashbackLoading ? '...' : `${cartCurrency} ${availableCashback.toFixed(2)}`}
-                        </span>
-                      </div>
-                      {appliedCashback > 0 ? (
-                        <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2.5">
-                          <span className="text-sm font-semibold text-emerald-800">{t('cashbackApplied')}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-emerald-700">−{cartCurrency} {appliedCashback.toFixed(2)}</span>
-                            <button type="button" onClick={clearCashback} className="p-1 rounded-full hover:bg-emerald-100">
-                              <X className="w-3.5 h-3.5 text-emerald-700" />
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={cashbackInput}
-                            onChange={(e) => { setCashbackInput(e.target.value); setCashbackError(''); }}
-                            placeholder={t('cashbackAmount')}
-                            disabled={!isSignedIn || cashbackLoading || availableCashback <= 0}
-                            className="min-w-0 flex-1 rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleApplyCashback}
-                            disabled={!cashbackInput || !isSignedIn || cashbackLoading || availableCashback <= 0}
-                            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                          >
-                            {t('cashbackApply')}
-                          </button>
-                        </div>
-                      )}
-                      {cashbackError && <p className="mt-2 text-xs font-medium text-destructive">{cashbackError}</p>}
-                    </div>
-
-                    <div className="rounded-[16px] border border-primary/20 bg-primary/5 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-bold text-primary">{isRtl ? 'الكاش باك من هذا الطلب' : 'Cashback from this order'}</p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {isRtl ? 'يصبح متاحاً بعد تأكيد الطلب.' : 'This becomes available after the order is confirmed.'}
-                          </p>
-                        </div>
-                        <span className="shrink-0 font-display text-lg font-bold text-primary">{cartCurrency} {cashbackToEarn.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-muted/50 rounded-[16px] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{t('items')}</p>
-                      <div className="flex flex-col gap-1 mb-3">
-                        {items.map(item => (
-                          <div key={`${item.id}-${item.selectedDuration}`} className="flex justify-between text-sm">
-                            <span className="text-foreground/80 truncate max-w-[200px]">{item.name} ({item.selectedDuration})</span>
-                            <span className="font-semibold">{item.selectedCurrency ?? cartCurrency} {item.selectedPrice * item.quantity}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {promo.status === 'valid' && (
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-[#1CC88A] font-semibold">{t('discount')} ({promo.percentage}%)</span>
-                          <span className="text-[#1CC88A] font-semibold">−{cartCurrency} {discountAmount}</span>
-                        </div>
-                      )}
-                      {appliedCashback > 0 && (
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-emerald-700 font-semibold">{t('cashback')}</span>
-                          <span className="text-emerald-700 font-semibold">−{cartCurrency} {appliedCashback.toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between font-display font-bold text-base pt-2 border-t border-black/[0.06]">
-                        <span>{t('total')}</span>
-                        <span className="text-primary">{cartCurrency} {finalTotal}</span>
-                      </div>
-                    </div>
-
-                    <button type="submit"
-                      className="w-full bg-primary hover:bg-primary/90 text-white font-semibold py-4 rounded-[18px] transition-all active:scale-[0.98] shadow-sm flex items-center justify-center gap-2">
-                      {t('next')}
-                      {isRtl ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    </button>
-                  </motion.form>
-                )}
-
-                {/* ── Step 2: Payment method and order summary ── */}
-                {step === 2 && (
-                  <motion.div key="step2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid overflow-hidden rounded-[24px] border border-[#d9d0c6] bg-white shadow-sm lg:grid-cols-[1.05fr_.95fr]">
-                    <section className="bg-[#f1ede7] p-5 sm:p-8" aria-labelledby="payment-method-heading">
-                      <div className="mb-6 flex items-center justify-between gap-3">
-                        <h2 id="payment-method-heading" className="font-display text-2xl font-semibold text-[#3e3530]">
-                          {isRtl ? 'طريقة الدفع' : 'Payment method'}
-                        </h2>
-                        <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-[#786e67]">{payCurrency}</span>
-                      </div>
-
-                      <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl bg-white/60 p-1.5" role="radiogroup" aria-label={isRtl ? 'عملة الدفع' : 'Payment currency'}>
-                        {(['USD', 'EGP'] as const).map(currency => {
-                          const selected = payCurrency === currency;
-                          return <button
-                            key={currency}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            onClick={() => {
-                              setPayCurrency(currency);
-                              setPaymentMethod(null);
-                              setPaypalError('');
-                              preparedPayPalOrderRef.current = null;
-                              clearCashback();
-                              idempotencyKeyRef.current = crypto.randomUUID();
-                            }}
-                            className={`rounded-lg px-3 py-2.5 text-sm font-bold transition ${selected ? 'bg-[#403730] text-white shadow-sm' : 'text-[#786e67] hover:bg-white'}`}
-                          >
-                            {currency === 'USD' ? (isRtl ? 'الدولار الأمريكي' : 'USD · Dollar') : (isRtl ? 'الجنيه المصري' : 'EGP · Egyptian pound')}
-                          </button>;
-                        })}
-                      </div>
-
-                      {payCurrency === 'USD' ? (
-                        <div className="divide-y divide-[#d9d0c6] border-y border-[#d9d0c6]" role="radiogroup" aria-label={isRtl ? 'طرق الدفع بالدولار' : 'USD payment methods'}>
-                          <button
-                            type="button"
-                            disabled={paypalSdkState !== 'ready' || !paypalEligible}
-                            onClick={() => setPaymentMethod('card')}
-                            aria-checked={paymentMethod === 'card'}
-                            role="radio"
-                            className={`flex min-h-[76px] w-full items-center gap-3 text-start transition disabled:cursor-not-allowed disabled:opacity-50 ${paymentMethod === 'card' ? 'text-[#302923]' : 'text-[#544a43]'}`}
-                          >
-                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === 'card' ? 'border-primary' : 'border-[#8d8178]'}`}>
-                              {paymentMethod === 'card' && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-semibold">{isRtl ? 'بطاقة خصم أو ائتمان' : 'Debit or credit card'}</span>
-                              <span className="mt-2 flex flex-wrap items-center gap-1.5" aria-label="Visa and Mastercard">
-                                <VisaLogo />
-                                <MastercardLogo />
-                              </span>
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={paypalSdkState !== 'ready' || !paypalEligible}
-                            onClick={() => setPaymentMethod('paypal')}
-                            aria-checked={paymentMethod === 'paypal'}
-                            role="radio"
-                            className={`flex min-h-[76px] w-full items-center gap-3 text-start transition disabled:cursor-not-allowed disabled:opacity-50 ${paymentMethod === 'paypal' ? 'text-[#302923]' : 'text-[#544a43]'}`}
-                          >
-                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === 'paypal' ? 'border-primary' : 'border-[#8d8178]'}`}>
-                              {paymentMethod === 'paypal' && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-                            </span>
-                            <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                              <span>
-                                <span className="block font-semibold">PayPal</span>
-                                <span className="mt-1 block text-xs text-[#786e67]">{isRtl ? 'الدفع بأمان عبر حساب PayPal' : 'Pay securely with PayPal'}</span>
-                              </span>
-                              <PaypalLogo />
-                            </span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-[#d9d0c6] border-y border-[#d9d0c6]" role="radiogroup" aria-label={isRtl ? 'طرق الدفع بالجنيه' : 'EGP payment methods'}>
-                          <button
-                            type="button"
-                            onClick={() => setPaymentMethod('instapay')}
-                            aria-checked={paymentMethod === 'instapay'}
-                            role="radio"
-                            className={`flex min-h-[82px] w-full items-center gap-3 text-start transition ${paymentMethod === 'instapay' ? 'text-[#302923]' : 'text-[#544a43]'}`}
-                          >
-                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === 'instapay' ? 'border-primary' : 'border-[#8d8178]'}`}>
-                              {paymentMethod === 'instapay' && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-semibold">{isRtl ? 'إنستاباي' : 'Instapay'}</span>
-                              <span className="mt-1 block text-xs text-[#786e67]">{t('instapayDesc')}</span>
-                            </span>
-                            <InstapayLogo />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setPaymentMethod('vodafone')}
-                            aria-checked={paymentMethod === 'vodafone'}
-                            role="radio"
-                            className={`flex min-h-[82px] w-full items-center gap-3 text-start transition ${paymentMethod === 'vodafone' ? 'text-[#302923]' : 'text-[#544a43]'}`}
-                          >
-                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === 'vodafone' ? 'border-primary' : 'border-[#8d8178]'}`}>
-                              {paymentMethod === 'vodafone' && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block font-semibold">{isRtl ? 'فودافون كاش' : 'Vodafone Cash'}</span>
-                              <span className="mt-1 block text-xs text-[#786e67]">{t('vodafoneDesc')}</span>
-                            </span>
-                            <VodafoneCashLogo />
-                          </button>
-                        </div>
-                      )}
-
-                      {paypalSdkState === 'loading' && payCurrency === 'USD' && <p className="mt-4 text-xs text-[#786e67]">{isRtl ? 'جار التحقق من توفر الدفع…' : 'Checking payment availability…'}</p>}
-                      {paypalSdkState === 'ready' && payCurrency === 'USD' && !paypalEligible && <p className="mt-4 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{isRtl ? 'PayPal غير متاح حالياً.' : 'PayPal is not currently available.'}</p>}
-                      {paypalSdkState === 'unavailable' && payCurrency === 'USD' && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-2 text-xs text-destructive">{isRtl ? 'PayPal غير متاح حالياً. حاول مرة أخرى لاحقاً.' : 'PayPal is currently unavailable. Please try again later.'}</p>}
-                      {paypalError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-2 text-xs text-destructive">{paypalError}</p>}
-
-                      <div className="mt-7 flex items-center gap-4">
-                        <button type="button" onClick={() => setStep(1)} className="text-sm font-semibold text-[#786e67] transition hover:text-[#403730]">{t('back')}</button>
-                        <button
-                          type="button"
-                          disabled={!paymentMethod || (payCurrency === 'USD' && (paypalSdkState !== 'ready' || !paypalEligible || paypalBusy))}
-                          onClick={handlePaymentContinue}
-                          className="flex-1 rounded-full bg-[#8f6f63] px-5 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#76594f] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isRtl ? 'متابعة' : 'Continue'}
-                        </button>
-                      </div>
-                    </section>
-
-                    <aside className="bg-white p-5 sm:p-8" aria-labelledby="order-summary-heading">
-                      <div className="mb-6 flex items-center justify-between gap-3">
-                        <h2 id="order-summary-heading" className="font-display text-2xl font-semibold text-[#3e3530]">
-                          {isRtl ? 'ملخص الطلب' : 'Order summary'}
-                        </h2>
-                        <span className="text-sm text-[#948a82]">{items.length} {isRtl ? 'منتج' : items.length === 1 ? 'item' : 'items'}</span>
-                      </div>
-
-                      <div className="space-y-4">
-                        {items.map(item => {
-                          const unitPrice = payCurrency === 'USD' ? getItemUsdUnitPrice(item, fallbackEgpPerUsd) : item.selectedPrice;
-                          const currencyLabel = payCurrency === 'USD' ? 'USD' : 'EGP';
-                          return <div key={`${item.id}-${item.selectedDuration}`} className="flex items-start justify-between gap-4 border-b border-[#eee8e1] pb-4">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-[#403730]">{item.name}</p>
-                              <p className="mt-1 text-xs text-[#948a82]">{item.selectedDuration} · {isRtl ? `الكمية ${item.quantity}` : `Qty ${item.quantity}`}</p>
-                            </div>
-                            <p className="shrink-0 text-sm font-semibold text-[#544a43]">{currencyLabel} {(unitPrice * item.quantity).toFixed(2)}</p>
-                          </div>;
-                        })}
-                      </div>
-
-                      <div className="mt-6 space-y-3 text-sm text-[#786e67]">
-                        <div className="flex justify-between gap-4">
-                          <span>{isRtl ? 'المجموع الفرعي' : 'Subtotal'}</span>
-                          <span className="font-semibold text-[#544a43]">{payCurrency} {baseTotal.toFixed(2)}</span>
-                        </div>
-                        {promo.status === 'valid' && <div className="flex justify-between gap-4 text-emerald-700"><span>{t('discount')} ({promo.percentage}%)</span><span className="font-semibold">−{payCurrency} {discountAmount}</span></div>}
-                        {appliedCashback > 0 && <div className="flex justify-between gap-4 text-emerald-700"><span>{t('cashback')}</span><span className="font-semibold">−{payCurrency} {appliedCashback.toFixed(2)}</span></div>}
-                      </div>
-
-                      <div className="mt-6 flex items-center justify-between gap-4 border-t border-[#eee8e1] pt-5 text-lg font-bold text-[#302923]">
-                        <span>{t('total')}</span>
-                        <span>{payCurrency} {finalTotal.toFixed(2)}</span>
-                      </div>
-                      {payCurrency === 'USD' && <p className="mt-3 text-xs leading-relaxed text-[#948a82]">{isRtl ? `سيتم خصم ${finalTotal.toFixed(2)} دولار أمريكي عبر PayPal.` : `You will be charged ${finalTotal.toFixed(2)} USD through PayPal.`}</p>}
-                    </aside>
-                  </motion.div>
-                )}
-                {step === 3 && payCurrency === 'EGP' && (
-                  <motion.div key="egp-details" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-3">
-                    {paymentMethod === 'instapay' && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><b>Instapay</b><a href={PAYMENT_INFO.instapay.link} target="_blank" rel="noopener noreferrer" className="mt-3 block rounded-xl bg-blue-600 p-3 text-center font-semibold text-white">{t('payViaInstapay')}</a></div>}
-                    {paymentMethod === 'vodafone' && <div className="rounded-xl border border-red-200 bg-red-50 p-4"><b>{isRtl ? 'فودافون كاش' : 'Vodafone Cash'}</b><div className="mt-3 flex min-w-0 rounded-xl bg-white p-3"><span className="min-w-0 flex-1 font-mono" dir="ltr">{PAYMENT_INFO.vodafone.number}</span><CopyButton text={PAYMENT_INFO.vodafone.number} /></div></div>}
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="mb-3 text-sm">{t('sendProofExplain')}</p><button type="button" disabled={createOrder.isPending} onClick={() => void handleSendProof()} className="w-full rounded-xl bg-emerald-600 p-3 font-semibold text-white disabled:opacity-50">{t('sendProofViaWhatsApp')}</button></div>
-                    <button type="button" onClick={() => setStep(2)} className="text-sm text-muted-foreground">{t('back')}</button>
-                  </motion.div>
-                )}
-                {step === 3 && payCurrency === 'USD' && paymentMethod && (
-                  <motion.div key={`paypal-${paymentMethod}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex min-w-0 flex-col gap-3">
-                    <div className="grid gap-1 rounded-xl border border-blue-200 bg-blue-50/50 p-3 text-sm"><div className="flex min-w-0 justify-between gap-3"><span>{isRtl ? 'إجمالي الطلب' : 'Order total'}</span><b className="shrink-0">{egpCartTotal.toLocaleString(isRtl ? 'ar-EG' : 'en-US')} {isRtl ? 'جنيه' : 'EGP'}</b></div><div className="flex min-w-0 justify-between gap-3 text-primary"><span>{isRtl ? 'المبلغ المطلوب عبر PayPal' : 'Amount due through PayPal'}</span><b className="shrink-0">{finalTotal.toFixed(2)} {isRtl ? 'دولار' : 'USD'}</b></div></div>
-                    {paypalBusy && <p className="text-center text-sm text-muted-foreground">{isRtl ? 'جار إنشاء الطلب أو تأكيد الدفع بأمان…' : 'Securely creating the order or confirming payment…'}</p>}
-                    {paypalSdk && <PayPalCheckout method={paymentMethod as PayPalMethod} cardMode={cardEligibility} sdk={paypalSdk} createOrder={createPayPalOrder} cardholderName={name} onSuccess={capturePayPalOrder} onError={setPaypalError} isRtl={isRtl} disabled={paypalBusy} />}
-                    {paypalError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-destructive">{paypalError}</p>}
-                    <button type="button" disabled={paypalBusy} onClick={() => setStep(2)} className="text-sm text-muted-foreground">{t('back')}</button>
-                  </motion.div>
-                )}
-
-              </AnimatePresence>
-            </div>
-        </motion.div>
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-primary"><Wallet className="h-5 w-5"/></div><div><h2 className="text-xl font-bold">وسيلة الدفع</h2><p className="text-sm text-slate-500">اختر الطريقة المناسبة لك</p></div></div>
+            {[{label:'الدفع بالجنيه المصري', ids:['instapay','vodafone']}, {label:'الدفع بالدولار',ids:['paypal','card']}].map(group=><fieldset key={group.label} className="mt-6"><legend className="mb-3 flex w-full items-center gap-2 text-sm font-bold text-slate-700"><Banknote className="h-4 w-4 text-primary"/>{group.label}</legend><div className="grid gap-3 sm:grid-cols-2">{methods.filter(m=>group.ids.includes(m.id)).map(m=><label key={m.id} className={`relative flex min-h-[104px] cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 transition focus-within:ring-2 focus-within:ring-primary ${method===m.id?'border-primary bg-blue-50/60 shadow-sm':'border-slate-200 hover:border-slate-300'}`}><input type="radio" name="payment" value={m.id} checked={method===m.id} onChange={()=>selectMethod(m.id)} className="h-5 w-5 shrink-0 accent-blue-600" aria-label={`${m.title}، الدفع بعملة ${m.currency}`}/><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2">{m.icon}<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold" dir="ltr">{m.currency}</span></span><span className="mt-2 block text-xs text-slate-500">{m.description}</span></span></label>)}</div></fieldset>)}
+            {(method==='paypal'||method==='card') && <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-600"><ShieldCheck className="h-4 w-4 text-emerald-600"/>بيانات الدفع مشفرة وتُعالج بأمان عبر PayPal</div>{sdkState==='loading'&&<div className="flex min-h-14 items-center justify-center gap-2"><Loader2 className="h-5 w-5 animate-spin"/>جار تجهيز الدفع الآمن…</div>}{sdkState==='unavailable'&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">وسيلة الدفع غير متاحة حالياً. جرّب وسيلة أخرى أو حاول لاحقاً.</p>}{!customerFieldsReady && <button type="button" onClick={validCustomer} className="min-h-12 w-full rounded-xl bg-slate-900 px-4 font-bold text-white">{cta}</button>}{sdkState==='ready' && ((method==='paypal'&&paypalEligible)||(method==='card'&&cardMode)) && sdk && customerFieldsReady && <PayPalCheckout method={method} cardMode={cardMode} sdk={sdk} createOrder={createPayPalOrder} cardholderName={name} onSuccess={capture} onError={setError} isRtl disabled={busy}/>}</div>}
+            {error&&<p role="alert" className="mt-4 flex gap-2 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700"><AlertCircle className="h-5 w-5 shrink-0"/>{error}</p>}
+            {method!=='paypal'&&method!=='card'&&<button onClick={submitManual} disabled={!method||busy} className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-base font-bold text-white shadow-lg shadow-blue-200 disabled:cursor-not-allowed disabled:opacity-50">{busy&&<Loader2 className="h-5 w-5 animate-spin"/>}{cta}</button>}
+          </div>
+        </section>
+        <aside className="order-1 lg:sticky lg:top-24 lg:order-2"><div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-5 sm:p-6"><div className="flex items-center justify-between"><div><h2 className="text-lg font-bold">ملخص الطلب</h2><p className="mt-1 text-xs text-slate-500">{productCount} {productCount===1?'منتج':'منتجات'}</p></div><ShoppingBag className="h-6 w-6 text-primary"/></div></div><div className="max-h-64 space-y-4 overflow-y-auto p-5 lg:max-h-[42vh]">{items.map(item=>{const unit=currency==='USD'?getItemUsdUnitPrice(item,rate):getItemEgpUnitPrice(item,rate); return <div key={`${item.id}-${item.selectedDuration}`} className="flex gap-3"><div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">{item.coverImageUrl?<img src={item.coverImageUrl} alt="" className="h-full w-full object-cover"/>:<span className="grid h-full place-items-center font-bold text-slate-400">{item.name[0]}</span>}<span className="absolute -left-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-slate-800 px-1 text-[10px] text-white">{item.quantity}</span></div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold">{item.name}</h3><p className="mt-0.5 text-xs text-slate-500">{item.selectedDuration}</p>{item.description&&<p className="mt-1 line-clamp-1 text-[11px] text-slate-400">{item.description}</p>}</div><strong className="shrink-0 text-sm" dir="ltr">{(unit*item.quantity).toFixed(2)} {currency}</strong></div>})}</div>
+          <div className="border-t border-slate-100 p-5 sm:p-6"><div className="flex gap-2"><input value={promoInput} onChange={e=>setPromoInput(e.target.value)} placeholder="كود الخصم" className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3"/><button onClick={applyPromo} disabled={promo.status==='loading'} className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white">تطبيق</button></div>{promo.status==='valid'&&<p className="mt-2 text-xs font-bold text-emerald-700">تم تطبيق خصم {promo.percentage}%</p>}{promo.status==='invalid'&&<p className="mt-2 text-xs text-red-600">الكود غير صالح أو لا ينطبق على هذه المنتجات.</p>}
+          {isSignedIn&&availableCashback>0&&<div className="mt-3 flex gap-2"><input value={cashbackInput} onChange={e=>setCashbackInput(e.target.value)} type="number" min="0" max={availableCashback} placeholder={`كاش باك متاح: ${availableCashback.toFixed(2)}`} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-3"/><button onClick={()=>{const n=Number(cashbackInput); if(n>0&&n<=availableCashback&&n<=beforeCashback){setCashbackUsed(Math.round(n*100)/100);setError('')}else setError('قيمة الكاش باك غير صالحة.')}} className="rounded-xl border px-4 text-sm font-bold">استخدام</button></div>}
+          <dl className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><dt className="text-slate-500">الإجمالي الفرعي</dt><dd dir="ltr">{subtotal.toFixed(2)} {currency}</dd></div>{discount>0&&<div className="flex justify-between text-emerald-700"><dt>الخصم</dt><dd dir="ltr">-{discount.toFixed(2)} {currency}</dd></div>}{cashbackUsed>0&&<div className="flex justify-between text-emerald-700"><dt>الكاش باك المستخدم</dt><dd dir="ltr">-{cashbackUsed.toFixed(2)} {currency}</dd></div>}<div className="flex justify-between border-t pt-4 text-lg font-black"><dt>الإجمالي النهائي</dt><dd dir="ltr">{total.toFixed(2)} {currency}</dd></div><div className="flex justify-between text-xs text-slate-500"><dt>كاش باك متوقع</dt><dd dir="ltr">{(total*.05).toFixed(2)} {currency}</dd></div></dl></div></div></aside>
       </div>
-    </Layout>
-  );
+    </div>
+  </main></Layout>;
 }
