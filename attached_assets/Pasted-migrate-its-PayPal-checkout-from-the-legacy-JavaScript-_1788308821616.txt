@@ -1,0 +1,46 @@
+migrate its PayPal checkout from the legacy JavaScript SDK to PayPal JavaScript SDK v6.
+
+The PayPal Developer app has “JavaScript SDK v6” enabled. The current frontend incorrectly loads:
+
+https://www.paypal.com/sdk/js?...&components=buttons,card-fields
+
+and uses the legacy APIs window.paypal.Buttons and window.paypal.CardFields.
+
+Replace this with the current official PayPal JavaScript SDK v6 integration.
+
+Requirements:
+
+Load the correct SDK URL based on /api/paypal/config:
+Sandbox: https://www.sandbox.paypal.com/web-sdk/v6/core
+Live: https://www.paypal.com/web-sdk/v6/core
+Initialize it using window.paypal.createInstance with the client ID returned by /api/paypal/config.
+Load the required v6 components:
+paypal-payments
+card-fields
+paypal-guest-payments if supported by the current official SDK documentation
+Call sdkInstance.findEligibleMethods with:
+currencyCode: "USD"
+amount: the actual USD checkout total
+Use these eligibility results:
+paypal for PayPal account checkout
+advanced_cards for inline credit/debit card fields
+card for PayPal-hosted guest card checkout if available
+Replace window.paypal.CardFields with:
+sdkInstance.createCardFieldsOneTimePaymentSession()
+createCardFieldsComponent for number, expiry, CVV, and cardholder name
+cardSession.submit(orderId, options)
+Keep PayPal order creation and capture on the backend. Never expose PAYPAL_CLIENT_SECRET in frontend code. Reuse the existing backend create-order and capture-order endpoints when compatible.
+Ensure createOrder returns the exact v6 shape expected by the SDK:
+{ orderId: data.id }
+Keep the checkout divided into:
+EGP: InstaPay and Vodafone Cash
+USD: PayPal and credit/debit cards
+For USD:
+Always show PayPal when paypal is eligible.
+Show the separate credit/debit card choice only when advanced_cards or card is eligible.
+If cards are not eligible, hide or disable that choice and show this Arabic message:
+"الدفع المباشر بالبطاقة غير متاح لهذا الحساب أو الموقع حالياً. يمكنك الدفع بالبطاقة من خلال نافذة PayPal إذا ظهر الخيار."
+Add useful development-only console logging showing the eligibility values for paypal, card, and advanced_cards. Do not log credentials, tokens, card details, or personal information.
+Preserve the existing Arabic RTL design, loading states, error handling, successful order flow, and mobile responsiveness.
+Follow the current official PayPal JavaScript SDK v6 documentation. Do not reintroduce the legacy /sdk/js script, window.paypal.Buttons, or window.paypal.CardFields APIs.
+Run the TypeScript checks, tests, and production build. Fix any resulting errors and summarize every changed file.

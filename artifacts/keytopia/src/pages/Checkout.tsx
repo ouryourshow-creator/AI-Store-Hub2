@@ -16,61 +16,181 @@ import { getGetMyCashbackQueryKey, useCreateOrder, useGetMyCashback, useGetEgpUs
 type PaymentMethod = 'instapay' | 'vodafone' | 'paypal' | 'card' | null;
 type PayCurrency = 'EGP' | 'USD';
 
-declare global { interface Window { paypal?: any } }
+type PayPalOrder = { orderId: string };
+type PayPalPaymentMethod = 'paypal' | 'advanced_cards' | 'card';
+type PayPalEligibility = {
+  isEligible: (method: PayPalPaymentMethod) => boolean;
+};
+type PayPalPaymentSession = {
+  start: (options: { presentationMode: 'auto' }, order: Promise<PayPalOrder>) => Promise<void>;
+};
+type PayPalCardFieldComponent = HTMLElement & { destroy?: () => void };
+type PayPalCardFieldsSession = {
+  createCardFieldsComponent: (options: {
+    type: 'number' | 'expiry' | 'cvv';
+    placeholder?: string;
+  }) => PayPalCardFieldComponent;
+  submit: (
+    orderId: string,
+    options?: { name?: string; billingAddress?: Record<string, string> },
+  ) => Promise<{
+    state: 'succeeded' | 'canceled' | 'failed';
+    data?: { orderId?: string; message?: string };
+  }>;
+};
+type PayPalSdk = {
+  findEligibleMethods: (options: { currencyCode: string; amount: string }) => Promise<PayPalEligibility>;
+  createPayPalOneTimePaymentSession: (options: {
+    onApprove: (data: { orderId: string }) => Promise<void>;
+    onCancel?: () => void;
+    onError?: (error: unknown) => void;
+  }) => PayPalPaymentSession;
+  createPayPalGuestOneTimePaymentSession?: (options: {
+    onApprove: (data: { orderId: string }) => Promise<void>;
+  }) => PayPalPaymentSession;
+  createCardFieldsOneTimePaymentSession: () => PayPalCardFieldsSession;
+};
+
+declare global {
+  interface Window {
+    paypal?: {
+      createInstance: (options: {
+        clientId: string;
+        components: string[];
+        pageType: 'checkout';
+      }) => Promise<PayPalSdk>;
+    };
+  }
+}
 
 type PayPalMethod = 'paypal' | 'card';
 
 type PayPalCheckoutProps = {
   method: PayPalMethod;
-  createOrder: () => Promise<string>;
+  cardMode: Exclude<PayPalPaymentMethod, 'paypal'> | null;
+  sdk: PayPalSdk;
+  createOrder: () => Promise<PayPalOrder>;
+  cardholderName: string;
   onSuccess: (id: string) => Promise<void>;
   onError: (message: string) => void;
   isRtl: boolean;
   disabled: boolean;
 };
 
-function PayPalCheckout({ method, createOrder, onSuccess, onError, isRtl, disabled }: PayPalCheckoutProps) {
+function PayPalCheckout({ method, cardMode, sdk, createOrder, cardholderName, onSuccess, onError, isRtl, disabled }: PayPalCheckoutProps) {
   const buttonsContainer = useRef<HTMLDivElement>(null);
-  const [cardFields, setCardFields] = useState<any>(null);
+  const cardContainer = useRef<HTMLDivElement>(null);
+  const cardSubmitButton = useRef<HTMLButtonElement>(null);
+  const [cardReady, setCardReady] = useState(false);
 
   useEffect(() => {
-    if (!window.paypal) return;
     let active = true;
+    setCardReady(false);
+
     if (method === 'paypal' && buttonsContainer.current) {
-      buttonsContainer.current.replaceChildren();
-      const buttons = window.paypal.Buttons({
-        fundingSource: window.paypal.FUNDING.PAYPAL,
-        style: { layout: 'vertical', shape: 'pill', label: 'paypal' },
-        createOrder,
-        onApprove: (data: { orderID: string }) => onSuccess(data.orderID),
+      const button = document.createElement('paypal-button');
+      button.setAttribute('type', 'pay');
+      buttonsContainer.current.replaceChildren(button);
+      const session = sdk.createPayPalOneTimePaymentSession({
+        onApprove: ({ orderId }) => onSuccess(orderId),
         onCancel: () => onError(isRtl ? 'تم إلغاء الدفع. يمكنك المحاولة مرة أخرى.' : 'Payment was cancelled. You can try again.'),
-        onError: () => onError(isRtl ? 'تعذر إكمال الدفع باستخدام PayPal. حاول مرة أخرى.' : 'PayPal could not complete the payment. Please retry.'),
+        onError: () => onError(isRtl ? 'تعذر إكمال الدفع باستخدام PayPal. حاول مرة أخرى.' : 'PayPal could not complete the payment. Please try again.'),
       });
-      buttons.render(buttonsContainer.current);
-      return () => { active = false; buttons.close?.(); };
+      const handleClick = () => {
+        void session.start({ presentationMode: 'auto' }, createOrder()).catch(() => {
+          if (active) onError(isRtl ? 'تعذر بدء الدفع باستخدام PayPal. حاول مرة أخرى.' : 'PayPal could not start the payment. Please try again.');
+        });
+      };
+      button.addEventListener('click', handleClick);
+      return () => {
+        active = false;
+        button.removeEventListener('click', handleClick);
+        buttonsContainer.current?.replaceChildren();
+      };
     }
 
-    const fields = window.paypal.CardFields?.({
-      createOrder,
-      onApprove: (data: { orderID: string }) => onSuccess(data.orderID),
-      onError: () => onError(isRtl ? 'تم رفض البطاقة أو تعذر معالجتها. تحقق من البيانات وحاول مرة أخرى.' : 'The card was declined or could not be processed. Check the details and retry.'),
-    });
-    if (fields?.isEligible?.()) {
-      fields.NameField().render('#paypal-card-name');
-      fields.NumberField().render('#paypal-card-number');
-      fields.ExpiryField().render('#paypal-card-expiry');
-      fields.CVVField().render('#paypal-card-cvv');
-      if (active) setCardFields(fields);
+    if (method !== 'card' || !cardMode || !cardContainer.current) {
+      return () => { active = false; };
     }
-    return () => { active = false; };
-  }, [method]);
+
+    const container = cardContainer.current;
+    container.replaceChildren();
+
+    if (cardMode === 'card') {
+      const basicCardContainer = document.createElement('paypal-basic-card-container');
+      const basicCardButton = document.createElement('paypal-basic-card-button');
+      basicCardContainer.appendChild(basicCardButton);
+      container.appendChild(basicCardContainer);
+      const guestSession = sdk.createPayPalGuestOneTimePaymentSession?.({
+        onApprove: ({ orderId }) => onSuccess(orderId),
+      });
+
+      if (!guestSession) {
+        onError(isRtl ? 'الدفع بالبطاقة غير متاح حالياً.' : 'Card payment is currently unavailable.');
+        return () => { active = false; container.replaceChildren(); };
+      }
+
+      const handleGuestClick = () => {
+        void guestSession.start({ presentationMode: 'auto' }, createOrder()).catch(() => {
+          if (active) onError(isRtl ? 'تعذر بدء الدفع بالبطاقة. حاول مرة أخرى.' : 'Card payment could not start. Please try again.');
+        });
+      };
+      basicCardButton.addEventListener('click', handleGuestClick);
+      setCardReady(true);
+      return () => {
+        active = false;
+        basicCardButton.removeEventListener('click', handleGuestClick);
+        container.replaceChildren();
+      };
+    }
+
+    const cardSession = sdk.createCardFieldsOneTimePaymentSession();
+    const fields = (['number', 'expiry', 'cvv'] as const).map((type) => cardSession.createCardFieldsComponent({
+      type,
+      placeholder: type === 'number' ? 'Card number' : type === 'expiry' ? 'MM/YY' : 'CVV',
+    }));
+    fields.forEach((field) => {
+      const fieldContainer = document.createElement('div');
+      fieldContainer.className = 'mb-2 h-11 min-w-0 overflow-hidden rounded-lg border p-2 last:mb-0';
+      fieldContainer.appendChild(field);
+      container.appendChild(fieldContainer);
+    });
+    if (active) setCardReady(true);
+
+    const submitCard = async () => {
+      if (!active || disabled) return;
+      try {
+        const createdOrder = await createOrder();
+        const result = await cardSession.submit(createdOrder.orderId, { name: cardholderName.trim() || undefined });
+        if (result.state === 'succeeded') {
+          await onSuccess(result.data?.orderId ?? createdOrder.orderId);
+        } else if (result.state === 'canceled') {
+          onError(isRtl ? 'تم إلغاء التحقق من البطاقة. حاول مرة أخرى.' : 'Card verification was cancelled. Please try again.');
+        } else {
+          onError(result.data?.message || (isRtl ? 'تم رفض البطاقة أو تعذر معالجتها. تحقق من البيانات وحاول مرة أخرى.' : 'The card was declined or could not be processed. Check the details and retry.'));
+        }
+      } catch (error) {
+        onError(error instanceof Error ? error.message : (isRtl ? 'تعذر إتمام الدفع بالبطاقة. حاول مرة أخرى.' : 'Card payment failed. Please try again.'));
+      }
+    };
+
+    const payButton = cardSubmitButton.current;
+    const handleSubmitClick = () => { void submitCard(); };
+    payButton?.addEventListener('click', handleSubmitClick);
+    return () => {
+      active = false;
+      payButton?.removeEventListener('click', handleSubmitClick);
+      fields.forEach((field) => field.destroy?.());
+      container.replaceChildren();
+    };
+  }, [method, cardMode, sdk, cardholderName]);
 
   if (method === 'paypal') return <div className={disabled ? 'pointer-events-none opacity-60' : ''} ref={buttonsContainer} />;
   return <div className="space-y-2 rounded-xl border border-black/10 bg-white p-3 sm:p-4">
-    <div id="paypal-card-name" className="h-11 min-w-0 overflow-hidden rounded-lg border p-2" />
-    <div id="paypal-card-number" className="h-11 min-w-0 overflow-hidden rounded-lg border p-2" />
-    <div className="grid min-w-0 grid-cols-2 gap-2"><div id="paypal-card-expiry" className="h-11 min-w-0 overflow-hidden rounded-lg border p-2" /><div id="paypal-card-cvv" className="h-11 min-w-0 overflow-hidden rounded-lg border p-2" /></div>
-    <button type="button" disabled={disabled || !cardFields} onClick={() => cardFields?.submit()} className="w-full rounded-xl bg-[#0070ba] p-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isRtl ? 'الدفع بالبطاقة' : 'Pay by card'}</button>
+    <div ref={cardContainer} className="min-h-11 min-w-0 overflow-hidden rounded-lg border p-2" />
+    {cardMode === 'advanced_cards' && (
+      <button ref={cardSubmitButton} type="button" disabled={disabled || !cardReady} className="w-full rounded-xl bg-[#0070ba] p-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{isRtl ? 'الدفع بالبطاقة' : 'Pay by card'}</button>
+    )}
   </div>;
 }
 
@@ -140,7 +260,9 @@ export default function Checkout() {
   const [paypalError, setPaypalError] = useState('');
   const [paypalBusy, setPaypalBusy] = useState(false);
   const [paypalSdkState, setPaypalSdkState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle');
-  const [cardEligible, setCardEligible] = useState(false);
+  const [paypalSdk, setPaypalSdk] = useState<PayPalSdk | null>(null);
+  const [paypalEligible, setPaypalEligible] = useState(false);
+  const [cardEligibility, setCardEligibility] = useState<Exclude<PayPalPaymentMethod, 'paypal'> | null>(null);
   const [promoInput, setPromoInput] = useState('');
   const [promo, setPromo] = useState<PromoState>({ status: 'idle', code: '', percentage: 0 });
   const [cashbackInput, setCashbackInput] = useState('');
@@ -220,13 +342,14 @@ export default function Checkout() {
     setStep(3);
   };
 
-  const createPayPalOrder = async () => {
+  const createPayPalOrder = async (): Promise<PayPalOrder> => {
     if (paypalBusy) throw new Error('busy');
     setPaypalBusy(true); setPaypalError('');
     try {
       const order = await createOrder.mutateAsync({ data: { customerName: name.trim(), customerEmail: email.trim(), customerPhone: phone.trim(), currency: 'USD', idempotencyKey: idempotencyKeyRef.current, promoCode: promo.status === 'valid' ? promo.code : null, cashbackAmount: appliedCashback || undefined, referralCode: localStorage.getItem('keytopia_referral') ?? undefined, paymentMethod: 'paypal', items: items.map(item => ({ productId: item.id, duration: item.selectedDuration, quantity: item.quantity })) } });
       const response = await fetch('/api/paypal/orders', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localOrderId: order.id }) });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'PayPal unavailable'); return result.paypalOrderId as string;
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'PayPal unavailable');
+      return { orderId: result.paypalOrderId as string };
     } finally { setPaypalBusy(false); }
   };
   const capturePayPalOrder = async (paypalOrderId: string) => {
@@ -239,19 +362,18 @@ export default function Checkout() {
   useEffect(() => {
     setPaymentMethod(null);
     setPaypalError('');
+    setPaypalSdk(null);
+    setPaypalEligible(false);
+    setCardEligibility(null);
     let active = true;
     let sdkScript: HTMLScriptElement | null = null;
-    let handleSdkLoad: (() => void) | null = null;
-    let handleSdkError: (() => void) | null = null;
 
     if (payCurrency !== 'USD') {
       setPaypalSdkState('idle');
-      setCardEligible(false);
       return () => { active = false; };
     }
 
     setPaypalSdkState('loading');
-    setCardEligible(false);
 
     const timeout = window.setTimeout(() => {
       if (active) setPaypalSdkState('unavailable');
@@ -261,55 +383,79 @@ export default function Checkout() {
       if (!active) return;
       window.clearTimeout(timeout);
       setPaypalSdkState('unavailable');
-      setCardEligible(false);
+      setPaypalSdk(null);
+      setPaypalEligible(false);
+      setCardEligibility(null);
     };
 
-    const inspectEligibility = () => {
-      if (!active) return;
-      if (!window.paypal) { markUnavailable(); return; }
-      try {
-        setCardEligible(Boolean(window.paypal.CardFields?.({ createOrder: createPayPalOrder })?.isEligible?.()));
-      } catch {
-        // Card Fields eligibility must never prevent the standard PayPal button.
-        setCardEligible(false);
-      }
-      window.clearTimeout(timeout);
-      setPaypalSdkState('ready');
-    };
+    const loadSdk = async () => {
+      const configResponse = await fetch('/api/paypal/config');
+      if (!configResponse.ok) throw new Error('PayPal configuration request failed');
+      const config = await configResponse.json() as { available?: boolean; clientId?: string; environment?: 'sandbox' | 'live' };
+      if (!config.available || !config.clientId) throw new Error('PayPal is unavailable');
 
-    void fetch('/api/paypal/config')
-      .then(async response => {
-        if (!response.ok) throw new Error('PayPal configuration request failed');
-        const config = await response.json();
-        if (!config.available || !config.clientId) throw new Error('PayPal is unavailable');
-        if (window.paypal) { inspectEligibility(); return; }
-
-        const sdkUrl = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=USD&intent=capture&components=buttons,card-fields`;
-        sdkScript = document.querySelector<HTMLScriptElement>('script[data-keytopia-paypal-sdk="true"]');
+      if (!window.paypal?.createInstance) {
+        const sdkUrl = config.environment === 'live'
+          ? 'https://www.paypal.com/web-sdk/v6/core'
+          : 'https://www.sandbox.paypal.com/web-sdk/v6/core';
+        sdkScript = document.querySelector<HTMLScriptElement>('script[data-keytopia-paypal-sdk-v6="true"]');
+        if (sdkScript && sdkScript.src !== sdkUrl) {
+          sdkScript.remove();
+          sdkScript = null;
+        }
         if (!sdkScript) {
           sdkScript = document.createElement('script');
           sdkScript.src = sdkUrl;
           sdkScript.async = true;
-          sdkScript.dataset.keytopiaPaypalSdk = 'true';
+          sdkScript.dataset.keytopiaPaypalSdkV6 = 'true';
           document.head.appendChild(sdkScript);
         }
-        handleSdkLoad = inspectEligibility;
-        handleSdkError = markUnavailable;
-        sdkScript.addEventListener('load', handleSdkLoad, { once: true });
-        sdkScript.addEventListener('error', handleSdkError, { once: true });
-        // A previously inserted SDK may have completed between the initial check
-        // and listener registration.
-        if (window.paypal) inspectEligibility();
-      })
-      .catch(markUnavailable);
+        await new Promise<void>((resolve, reject) => {
+          if (window.paypal?.createInstance) {
+            resolve();
+            return;
+          }
+          const onLoad = () => resolve();
+          const onError = () => reject(new Error('PayPal SDK failed to load'));
+          sdkScript?.addEventListener('load', onLoad, { once: true });
+          sdkScript?.addEventListener('error', onError, { once: true });
+        });
+      }
+
+      if (!active || !window.paypal?.createInstance) return;
+      const sdk = await window.paypal.createInstance({
+        clientId: config.clientId,
+        components: ['paypal-payments', 'card-fields', 'paypal-guest-payments'],
+        pageType: 'checkout',
+      });
+      const paymentMethods = await sdk.findEligibleMethods({
+        currencyCode: 'USD',
+        amount: finalTotal.toFixed(2),
+      });
+      const eligiblePaypal = paymentMethods.isEligible('paypal');
+      const eligibleAdvancedCards = paymentMethods.isEligible('advanced_cards');
+      const eligibleGuestCards = paymentMethods.isEligible('card');
+      if (import.meta.env.DEV) {
+        console.debug('[PayPal v6] eligibility', {
+          paypal: eligiblePaypal,
+          card: eligibleGuestCards,
+          advanced_cards: eligibleAdvancedCards,
+        });
+      }
+      if (!active) return;
+      setPaypalSdk(sdk);
+      setPaypalEligible(eligiblePaypal);
+      setCardEligibility(eligibleAdvancedCards ? 'advanced_cards' : eligibleGuestCards ? 'card' : null);
+      setPaypalSdkState('ready');
+    };
+
+    void loadSdk().catch(markUnavailable);
 
     return () => {
       active = false;
       window.clearTimeout(timeout);
-      if (sdkScript && handleSdkLoad) sdkScript.removeEventListener('load', handleSdkLoad);
-      if (sdkScript && handleSdkError) sdkScript.removeEventListener('error', handleSdkError);
     };
-  }, [payCurrency]);
+  }, [payCurrency, finalTotal]);
 
   const handleSendProof = async (selectedMethod: Exclude<PaymentMethod, null> = paymentMethod as Exclude<PaymentMethod, null>) => {
     if (!selectedMethod || createOrder.isPending) return;
@@ -649,15 +795,15 @@ export default function Checkout() {
                         </button>;
                       })}
                     </div>
-                    {payCurrency === 'EGP' ? <div className="grid gap-2 rounded-xl border border-emerald-200 bg-emerald-50/40 p-2 sm:grid-cols-2">
+                     {payCurrency === 'EGP' ? <div className="grid gap-2 rounded-xl border border-emerald-200 bg-emerald-50/40 p-2 sm:grid-cols-2">
                       <button type="button" onClick={() => handlePaymentSelect('instapay')} className="flex min-w-0 items-center gap-3 rounded-xl border-2 border-transparent bg-white p-3 text-start shadow-sm hover:border-primary"><span className="shrink-0 rounded-lg bg-blue-50 p-2.5 font-bold text-blue-600">IP</span><span className="min-w-0"><span className="block font-semibold">{isRtl ? 'إنستاباي' : 'Instapay'}</span><span className="block text-xs text-muted-foreground">{t('instapayDesc')}</span></span></button>
                       <button type="button" onClick={() => handlePaymentSelect('vodafone')} className="flex min-w-0 items-center gap-3 rounded-xl border-2 border-transparent bg-white p-3 text-start shadow-sm hover:border-primary"><span className="shrink-0 rounded-lg bg-red-50 p-2.5 font-bold text-red-600">VC</span><span className="min-w-0"><span className="block font-semibold">{isRtl ? 'فودافون كاش' : 'Vodafone Cash'}</span><span className="block text-xs text-muted-foreground">{t('vodafoneDesc')}</span></span></button>
                     </div> : <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/50 p-3">
                       <p className="text-sm text-muted-foreground">{isRtl ? 'سيتم تحصيل قيمة طلبك بالدولار الأمريكي. اختر الدفع باستخدام PayPal أو بطاقة ائتمان أو خصم.' : 'Your order will be charged in US dollars. Choose PayPal or a credit or debit card.'}</p>
-                      <button type="button" onClick={() => setPaymentMethod('paypal')} aria-pressed={paymentMethod === 'paypal'} className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-2 bg-white p-3 text-start transition ${paymentMethod === 'paypal' ? 'border-[#0070ba] shadow-sm' : 'border-transparent'}`}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 font-bold text-[#0070ba]">P</span><span className="min-w-0 flex-1"><span className="block font-semibold">PayPal</span><span className="block text-xs text-muted-foreground">{isRtl ? 'الدفع باستخدام حساب PayPal' : 'Pay using your PayPal account'}</span></span>{paymentMethod === 'paypal' && <Check className="h-5 w-5 shrink-0 text-[#0070ba]" />}</button>
-                      <button type="button" disabled={paypalSdkState !== 'ready' || !cardEligible} onClick={() => { setPaymentMethod('card'); setStep(3); }} aria-pressed={paymentMethod === 'card'} className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-2 bg-white p-3 text-start transition disabled:cursor-not-allowed disabled:opacity-60 ${paymentMethod === 'card' ? 'border-[#0070ba] shadow-sm' : 'border-transparent'}`}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><CreditCard className="h-5 w-5 text-slate-700" /></span><span className="min-w-0 flex-1"><span className="block font-semibold">{isRtl ? 'بطاقة ائتمان أو خصم' : 'Credit or debit card'}</span><span className="block text-xs text-muted-foreground">{isRtl ? 'الدفع بالبطاقة بأمان عبر PayPal' : 'Pay securely by card through PayPal'}</span></span>{paymentMethod === 'card' && <Check className="h-5 w-5 shrink-0 text-[#0070ba]" />}</button>
+                       {(paypalSdkState !== 'ready' || paypalEligible) && <button type="button" disabled={paypalSdkState !== 'ready' || !paypalEligible} onClick={() => setPaymentMethod('paypal')} aria-pressed={paymentMethod === 'paypal'} className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-2 bg-white p-3 text-start transition disabled:cursor-not-allowed disabled:opacity-60 ${paymentMethod === 'paypal' ? 'border-[#0070ba] shadow-sm' : 'border-transparent'}`}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 font-bold text-[#0070ba]">P</span><span className="min-w-0 flex-1"><span className="block font-semibold">PayPal</span><span className="block text-xs text-muted-foreground">{isRtl ? 'الدفع باستخدام حساب PayPal' : 'Pay using your PayPal account'}</span></span>{paymentMethod === 'paypal' && <Check className="h-5 w-5 shrink-0 text-[#0070ba]" />}</button>}
+                       {cardEligibility && <button type="button" disabled={paypalSdkState !== 'ready'} onClick={() => { setPaymentMethod('card'); setStep(3); }} aria-pressed={paymentMethod === 'card'} className={`flex w-full min-w-0 items-center gap-3 rounded-xl border-2 bg-white p-3 text-start transition disabled:cursor-not-allowed disabled:opacity-60 ${paymentMethod === 'card' ? 'border-[#0070ba] shadow-sm' : 'border-transparent'}`}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100"><CreditCard className="h-5 w-5 text-slate-700" /></span><span className="min-w-0 flex-1"><span className="block font-semibold">{isRtl ? 'بطاقة ائتمان أو خصم' : 'Credit or debit card'}</span><span className="block text-xs text-muted-foreground">{cardEligibility === 'card' ? (isRtl ? 'الدفع بالبطاقة عبر نافذة PayPal' : 'Pay by card in a PayPal window') : (isRtl ? 'الدفع بالبطاقة بأمان عبر PayPal' : 'Pay securely by card through PayPal')}</span></span>{paymentMethod === 'card' && <Check className="h-5 w-5 shrink-0 text-[#0070ba]" />}</button>}
                       {paypalSdkState === 'loading' && <p className="text-xs text-muted-foreground">{isRtl ? 'جار التحقق من توفر الدفع بالبطاقة…' : 'Checking card payment availability…'}</p>}
-                      {paypalSdkState === 'ready' && !cardEligible && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{isRtl ? 'الدفع بالبطاقة غير متاح حالياً. يمكنك المتابعة باستخدام PayPal.' : 'Card payment is currently unavailable. You can continue using PayPal.'}</p>}
+                       {paypalSdkState === 'ready' && !cardEligibility && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{isRtl ? 'الدفع المباشر بالبطاقة غير متاح لهذا الحساب أو الموقع حالياً. يمكنك الدفع بالبطاقة من خلال نافذة PayPal إذا ظهر الخيار.' : 'Direct card payment is not currently available for this account or location. You can pay by card through a PayPal window if that option appears.'}</p>}
                       {paypalSdkState === 'unavailable' && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-destructive">{isRtl ? 'PayPal غير متاح حالياً. حاول مرة أخرى لاحقاً.' : 'PayPal is currently unavailable. Please try again later.'}</p>}
                       <div className="grid gap-1 rounded-xl bg-white p-3 text-sm">
                         <div className="flex min-w-0 justify-between gap-3"><span>{isRtl ? 'إجمالي الطلب' : 'Order total'}</span><b className="shrink-0">{egpCartTotal.toLocaleString(isRtl ? 'ar-EG' : 'en-US')} {isRtl ? 'جنيه' : 'EGP'}</b></div>
@@ -680,7 +826,7 @@ export default function Checkout() {
                   <motion.div key={`paypal-${paymentMethod}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex min-w-0 flex-col gap-3">
                     <div className="grid gap-1 rounded-xl border border-blue-200 bg-blue-50/50 p-3 text-sm"><div className="flex min-w-0 justify-between gap-3"><span>{isRtl ? 'إجمالي الطلب' : 'Order total'}</span><b className="shrink-0">{egpCartTotal.toLocaleString(isRtl ? 'ar-EG' : 'en-US')} {isRtl ? 'جنيه' : 'EGP'}</b></div><div className="flex min-w-0 justify-between gap-3 text-primary"><span>{isRtl ? 'المبلغ المطلوب عبر PayPal' : 'Amount due through PayPal'}</span><b className="shrink-0">{finalTotal.toFixed(2)} {isRtl ? 'دولار' : 'USD'}</b></div></div>
                     {paypalBusy && <p className="text-center text-sm text-muted-foreground">{isRtl ? 'جار إنشاء الطلب أو تأكيد الدفع بأمان…' : 'Securely creating the order or confirming payment…'}</p>}
-                    <PayPalCheckout method={paymentMethod as PayPalMethod} createOrder={createPayPalOrder} onSuccess={capturePayPalOrder} onError={setPaypalError} isRtl={isRtl} disabled={paypalBusy} />
+                    {paypalSdk && <PayPalCheckout method={paymentMethod as PayPalMethod} cardMode={cardEligibility} sdk={paypalSdk} createOrder={createPayPalOrder} cardholderName={name} onSuccess={capturePayPalOrder} onError={setPaypalError} isRtl={isRtl} disabled={paypalBusy} />}
                     {paypalError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-destructive">{paypalError}</p>}
                     <button type="button" disabled={paypalBusy} onClick={() => setStep(2)} className="text-sm text-muted-foreground">{t('back')}</button>
                   </motion.div>
