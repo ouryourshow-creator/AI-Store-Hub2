@@ -24,6 +24,48 @@ type PayPalEligibility = {
 type PayPalPaymentSession = {
   start: (options: { presentationMode: 'auto' }, order: Promise<PayPalOrder>) => Promise<void>;
 };
+type PayPalErrorPayload = {
+  code?: string;
+  message?: string;
+  paypalDebugId?: string | null;
+  requestId?: string;
+};
+class PayPalCheckoutError extends Error {
+  constructor(
+    readonly payload: PayPalErrorPayload,
+    readonly httpStatus: number | null,
+    fallbackMessage: string,
+  ) {
+    super(payload.message || fallbackMessage);
+    this.name = 'PayPalCheckoutError';
+  }
+}
+
+function errorPayload(value: unknown): PayPalErrorPayload {
+  if (!value || typeof value !== 'object') return {};
+  const raw = value as Record<string, unknown>;
+  return {
+    code: typeof raw.code === 'string' ? raw.code : undefined,
+    message: typeof raw.message === 'string' ? raw.message : undefined,
+    paypalDebugId: typeof raw.paypalDebugId === 'string' ? raw.paypalDebugId : null,
+    requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
+  };
+}
+
+function reportPayPalError(error: unknown, context: string): void {
+  if (!import.meta.env.DEV) return;
+  if (error instanceof PayPalCheckoutError) {
+    console.error(`[PayPal v6] ${context}`, {
+      code: error.payload.code,
+      message: error.payload.message,
+      paypalDebugId: error.payload.paypalDebugId,
+      requestId: error.payload.requestId,
+      httpStatus: error.httpStatus,
+    });
+    return;
+  }
+  console.error(`[PayPal v6] ${context}`, error);
+}
 type PayPalCardFieldComponent = HTMLElement & { destroy?: () => void };
 type PayPalCardFieldsSession = {
   createCardFieldsComponent: (options: {
